@@ -1,0 +1,452 @@
+const axios = require('axios');
+
+let data = JSON.stringify({
+  query: `mutation addToCart($cartRequest: CartInfoRequest!, $requestContext: RequestContext) {
+  addToCart(cartRequest: $cartRequest, requestContext: $requestContext) {
+    cartId
+    itemCount
+    customer {
+      userId
+      customerId
+      type
+      addresses {
+        id
+        firstName
+        lastName
+        addressLine1
+        addressLine2
+        zipCode
+        state
+        country
+        county
+        phone
+        phoneNumber
+        hideCVV
+        city
+        type
+        default
+        primaryPhoneId
+        addressIdentifier
+        businessAddress
+        category
+        __typename
+      }
+      __typename
+    }
+    payments {
+      emailId
+      amountCharged
+      cardBrand
+      maskedCardNumber
+      xref
+      paymentId
+      type
+      addressIds
+      __typename
+    }
+    rentalEstimate {
+      tools {
+        categoryCode
+        subCategoryCode
+        deposit
+        feeTotal
+        taxTotal
+        taxPercentage
+        fees {
+          type
+          value
+          taxTotal
+          taxPercentage
+          percentage
+          taxes {
+            type
+            value
+            percentage
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    messages {
+      type
+      messageCategoryType
+      correlationId
+      correlationType
+      longDesc
+      shortDesc
+      __typename
+    }
+    items {
+      id
+      quantity
+      product {
+        itemId
+        addons {
+          installation
+          termLength
+          type
+          price
+          totalPrice
+          quantity
+          itemId
+          id
+          category
+          description
+          detailsUrl
+          selected
+          storeId
+          protectionPlanParentId
+          brandName
+          configAttr
+          descriptiveAttributes
+          __typename
+        }
+        info {
+          returnable
+          quantityLimit
+          minimumOrderQuantity
+          inStoreReturnEligibility
+          paintBrand
+          paintDetails {
+            configId
+            colorName
+            rgb {
+              red
+              blue
+              green
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        specificationGroup {
+          specTitle
+          specifications {
+            specName
+            specValue
+            __typename
+          }
+          __typename
+        }
+        pricing {
+          value
+          original
+          total
+          totalWithNoDiscount
+          valueStartDate
+          valueEndDate
+          type
+          discount {
+            percentOff
+            dollarOff
+            __typename
+          }
+          clearance {
+            value
+            dollarOff
+            percentageOff
+            __typename
+          }
+          mapDetail {
+            mapPolicy
+            __typename
+          }
+          __typename
+        }
+        media {
+          images {
+            url
+            type
+            subType
+            sizes
+            hotspots
+            altText
+            __typename
+          }
+          __typename
+        }
+        identifiers {
+          configId
+          editUrl
+          copyUrl
+          productCategory
+          leadTime
+          canonicalUrl
+          brandName
+          itemId
+          modelNumber
+          productLabel
+          storeSkuNumber
+          skuClassification
+          productType
+          isSuperSku
+          shipType
+          partNumber
+          fromName
+          toName
+          message
+          deliveryMethod
+          recipientEmail
+          __typename
+        }
+        fulfillment {
+          backordered
+          backorderedShipDate
+          bossExcludedShipStates
+          excludedShipStates
+          seasonStatusEligible
+          anchorStoreStatus
+          anchorStoreStatusType
+          sthExcludedShipState
+          bossExcludedShipState
+          onlineStoreStatus
+          onlineStoreStatusType
+          inStoreAssemblyEligible
+          fulfillmentOptions {
+            type
+            fulfillable
+            services {
+              type
+              expectedArrival
+              hasFreeShipping
+              estimatedDelivery
+              freeDeliveryThreshold
+              deliveryCharge
+              selected
+              optimalFulfillment
+              dynamicEta {
+                hours
+                minutes
+                __typename
+              }
+              deliveryDates {
+                startDate
+                endDate
+                __typename
+              }
+              totalCharge
+              deliveryTimeline
+              locations {
+                isAnchor
+                locationId
+                zipCode
+                curbsidePickupFlag
+                isBuyInStoreCheckNearBy
+                distance
+                storeName
+                city
+                state
+                storePhone
+                type
+                inventory {
+                  isOutOfStock
+                  quantity
+                  isInStock
+                  isUnavailable
+                  isLimitedQuantity
+                  backordered
+                  maxAllowedBopisQty
+                  minAllowedBopisQty
+                  __typename
+                }
+                storeHours {
+                  monday {
+                    open
+                    close
+                    __typename
+                  }
+                  tuesday {
+                    open
+                    close
+                    __typename
+                  }
+                  wednesday {
+                    open
+                    close
+                    __typename
+                  }
+                  thursday {
+                    open
+                    close
+                    __typename
+                  }
+                  friday {
+                    open
+                    close
+                    __typename
+                  }
+                  saturday {
+                    open
+                    close
+                    __typename
+                  }
+                  sunday {
+                    open
+                    close
+                    __typename
+                  }
+                  storeTimeZone
+                  __typename
+                }
+                __typename
+              }
+              isBossDominant
+              __typename
+            }
+            addressId
+            __typename
+          }
+          __typename
+        }
+        dataSources
+        attributes {
+          name
+          value
+          sequenceNumber
+          __typename
+        }
+        essentialAccessories
+        __typename
+      }
+      selectedFulfillment
+      __typename
+    }
+    itemGrouping {
+      byFulfillment {
+        appliance {
+          type
+          zipCode
+          ids
+          __typename
+        }
+        pickup {
+          location {
+            curbsidePickupFlag
+            storeName
+            __typename
+          }
+          ids
+          __typename
+        }
+        delivery {
+          grouping {
+            type
+            ids
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    descriptiveAttr {
+      cartType
+      paypalExpress
+      paymentOnHold
+      isIcEnabled
+      displayIcOption
+      poJobName
+      hasSubscriptionItems
+      maxCartPriceContributor
+      uniqueItemCount
+      __typename
+    }
+    promos {
+      desc
+      longDesc
+      type
+      tag
+      appliedDisc
+      promoCode
+      restrictions {
+        paymentType
+        __typename
+      }
+      message {
+        type
+        messageCategoryType
+        correlationId
+        correlationType
+        longDesc
+        shortDesc
+        __typename
+      }
+      attached
+      promoItems {
+        appliedDiscount
+        appliedOn
+        __typename
+      }
+      __typename
+    }
+    localization {
+      primaryStoreId
+      deliveryZip
+      deliveryStateCode
+      __typename
+    }
+    totals {
+      total
+      totalDiscount
+      totalWithNoDiscount
+      deliveryCharge
+      applianceDeliveryCharge
+      type
+      adjustments {
+        amount
+        type
+        __typename
+      }
+      plccEligibleTotal
+      __typename
+    }
+    __typename
+  }
+}`,
+  variables: {"cartRequest":{"filterItem":true,"localization":{"primaryStoreId":6367},"items":{"delivery":[{"itemId":"304685815","quantity":"1","type":"sth","location":"32839"}]}},"requestContext":{"isBrandPricingPolicyCompliant":false}}
+});
+
+let config = {
+  method: 'post',
+  url: 'https://apionline.homedepot.com/federation-gateway/graphql?opname=addToCart',
+  headers: { 
+    'accept': '*/*', 
+    'accept-language': 'pt-BR,pt;q=0.9,en;q=0.8', 
+    'cache-control': 'no-cache', 
+    'content-type': 'application/json', 
+    'origin': 'https://www.homedepot.com', 
+    'pragma': 'no-cache', 
+    'priority': 'u=1, i', 
+    'referer': 'https://www.homedepot.com/', 
+    'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"', 
+    'sec-ch-ua-mobile': '?0', 
+    'sec-ch-ua-platform': '"Windows"', 
+    'sec-fetch-dest': 'empty', 
+    'sec-fetch-mode': 'cors', 
+    'sec-fetch-site': 'same-site', 
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36', 
+    'x-api-cookies': '{"x-user-id":"d3658588-a237-ec3b-e121-1080b1f6b36c"}', 
+    'x-cloud-trace-context': 'f368f54d4c4e4a0799ef301945b7aaa7/1;o=1', 
+    'x-current-url': '/cart/atc', 
+    'x-debug': 'false', 
+    'x-experience-name': 'cart', 
+    'x-hd-dc': 'origin', 
+    'x-parent-trace-id': '4c162aded97e230ebb09f525dc656c2a/8816040748378187197', 
+    'x-thd-customer-token': '', 
+    'Cookie': 'THD_CACHE_NAV_PERSIST=; thda.u=d3658588-a237-ec3b-e121-1080b1f6b36c; _px_f394gi7Fvmc43dfg_user_id=NTRjM2RhYzEtYTgyNi0xMWVmLWI2NmUtNzUwYjA1YjVmZjRm; ajs_anonymous_id=6e5b4921-ef50-4ca9-9735-9ed595c23d04; trx=5123222822367137066; DELIVERY_ZIP=32839; DELIVERY_ZIP_TYPE=AUTO; HD_DC=origin; AKA_A2=A; bm_ss=ab8e18ef4e; THD_NR=1; THD_SESSION=; THD_CACHE_NAV_SESSION=; thda.s=6c130828-946f-642e-b15a-e0d667bd42a7; THD_LOCALIZER=%257B%2522WORKFLOW%2522%253A%2522LOCALIZED_BY_STORE%2522%252C%2522THD_FORCE_LOC%2522%253A%25220%2522%252C%2522THD_INTERNAL%2522%253A%25220%2522%252C%2522THD_LOCSTORE%2522%253A%25226367%252BMillenia%2520-%2520Orlando%252C%2520FL%252B%2522%252C%2522THD_STRFINDERZIP%2522%253A%252232839%2522%252C%2522THD_STORE_HOURS%2522%253A%25221%253B8%253A00-20%253A00%253B2%253B6%253A00-22%253A00%253B3%253B6%253A00-22%253A00%253B4%253B6%253A00-22%253A00%253B5%253B6%253A00-22%253A00%253B6%253B6%253A00-22%253A00%253B7%253B6%253A00-22%253A00%2522%252C%2522THD_STORE_HOURS_EXPIRY%2522%253A1744596455%257D; cart_activity=bc9251ff-1161-4a71-a42b-713adee89669; THD_MCC_ID=c022cd15-ae2b-40b9-a21f-2997f3e45530; bm_mi=3AB1DE4C98A20EDDACAA5602ABAD0590~YAAQhklyaJmVxwqWAQAAKdnrMRv+BtqP1DtsSugq2ZNlO7siF+jTwvljfp+rLbS9M6GaBxAuhiQNqQJ0aiNmltFTcnnECTyF21DbOEPdOdiYwnPNcyZRTraJyCJYddydIbDdusxnJmwgUlHCOAWmI7dV1itczabyG+Spcjyo+BXsXRdDyMuM5ySztgNqrPPQNFH+c3GV49jis5XGFKAoBNoznvEU+hKQUrqypoFky6bmaMdwY/d3IGgXsLV8h+3zcGExSMHZfv45LPupc/LwVFoC650o8i6JW77OvvNay4SKEfWdMyQADxvmfRm0Ad6c7qTngF0yNUrKs8gFnxPCzJkia4bx/ZxBkM7pElBdDWa7Ev21KKg=~1; bm_so=EEB0995C88F73CB998B653A647D7EE229BFC4961C8CFC44778ACC16AEB42F556~YAAQhklyaJuVxwqWAQAAKdnrMQOo2zfnGEl0YLuu4dhY0aByzvlrPeIHqB5MiEJNH4v9fiDZBE3XPLT1agiWvuxyGftnQxAEnoZtFLQJMZ5/UA2tHO9CId0L8mxEmse9J/8xt8+Hk4rYgL5Z63Y51b5hd1daF4pUGZthX2NQHB6gbTNxobLJ30+ecS1svYWzpp7JOwTldUPcr/dsQsJiIeTDWZ/EnaSomukea0VMvu4GLTbT+X+k5hh0opXumSLJ6Wg9sMEIhmgBtEVvPmZXaxOZRmfguMQKvxqXJCDGtxGyOdE8FNbvYYYoryQDEOHn+mHeX8KB1sLaLdtH/eAGfSweHJobcjVMqTizmrj8sGwA2VFmzQ9Hpqv9Wz2/BrlLOGBfkzVoJlbQ+mtivVWsOGPBYCfPU21Rmr3rtV1vi7JlrIpIhpmNE+pyjIX724iW+vf/SsOAP+jN8zG4wikyil23; THD_PERSIST=C6%3d%7b%22I1%22%3a%220%22%7d%3a%3bC6%5fEXP%3d1747186271; bm_s=YAAQhklyaI6WxwqWAQAAqAvsMQMFTRgRoMBM4MRfFkk3dPryAEcsScjbHfFu3srajDiw4L5cFVkgRQWPmd0Ser0oXjDpye5veOjrbCE2XSbN0LiqiDkotyeygHja7t1DTnky2i64FwCwfcxvKuCzCwB2zicb4Ez9QoIkqaKKb8uOgpZleGGmRiKu3V6lB2RcvSt7mbMtyJBuPk5mrYhBekpSfnmIbjypUQQUFUkW2O17PUBIfK5ZJFr+iu+4tmEvT0HQ6hHh8uYI1ZLQOVXhIurC3xsk8ZMVOh/TRlhufP8z+WEiMrTilrWmiSTAk0upaLyp8WMUT11Fvjxl8ZuhYhzlJu3beHYEk9QoHFoyN3ErFXK8ienerAKw27ar5/PdvLhfpwS0r2my4otVQBYCagh7OsL2Tqr0Pq6pNt3cc7+FNZsbGflvM4FcIXG7+l0bFxNlS0Lk1YI2fRoxpp8=; bm_sv=1083BF98B85490D245929944498BB00C~YAAQhklyaI+WxwqWAQAAqAvsMRsg8QTspD9y4d2Gj5miVO/16XwQUoefomcKPpIUN4z1yEF18O0jT1/HyXyM9on96eNIxlnkS9hpXkjey/aOOe6ECBBAR6OUvz1JlT5vj30EkhOa/MRD5TAovD1F14AX+u8oNaqPPtQ4RhtXHJEsHgpqhUf8CMzN/+sCrostWWrYK7ECjQc1AP1SjNbLvrc4mBiFBrnZb/KwAwF0iiAtRNt6/L3Z8fh2fpn826z+BqiAsQ==~1; forterToken=c1f9f98cbb0f4b05b859d0482c705a47_1744594271883_15_dUAL43-mnts-a4_23ck_; bm_sz=4AC94CAC4AE246A841397556E4348A85~YAAQhklyaG6XxwqWAQAAYjvsMRv/NkaobsSYlHH9OHYk4E41sg2o/itwly1iBF4R4Yt7EEVEom1aM2dcguyq41k184rsKBLUvA5gshKFcr7F5zXYxa2wFNK5PPDsCh9qVL502r720Mhx4hZdfS56dvkc2yx8Bmf3ityjWwl7V3LqYayaj5re2oifrH8PthTGyTS/MuKViBFxScfewkupKfn6IalgOC3Ha56kwBRMyJwbkuUpuh/sg0yF2yI0PsrVB5D5KR1a4Y1aRlHIuh+tZiYUU+kcmMuNJHcdZ338j+dhi5ZXXddhYPmZxDkevym8PN/Lw+62vkq1QKNTJcY80ZLomeNISjef39UMh755Iya2jUL4wfa4MRdwc8dg3ugRFQCdXGLA1E7AKEGxUFhR7ShD3Kwn6emcX8ov63UVp/aAfl7kylEUnVqz5cKqIWbNwBcyOg0O1EyxlhTTPRjkw+ouwzK+kro=~3421235~3487043; ak_bmsc=1E4E0C174B58C3B0E69A17A14088F83B~000000000000000000000000000000~YAAQhklyaJGXxwqWAQAAGEvsMRuwOYGOSqno46Alj6rVa2gLq6nzz4MmY6sWPdr381/FMcK6jdMudNoiDFauaz7a4FPPnh5+MiKuGtmL0QOk2NebxpNZ4ftMEssWmlQM2bTczFH6wfpBYGxZYbDmrdnRboOfEfMjQoqOHfW3N3ufwA0lhZzh4fLab5WydA7xGtzZqOVN5dnefjZTLffvcPIFoC+Pm32MjcxbOnnrbtWFRqP36LCA7SV9JqRI8pFx4sZO4yLzv1M7pUn1NnixhfHCqP2WZQIXix3+NM2yvOdIdZk6fYMk4MYyKE6zDGnsKJb5muCxWDSXZZEfoWT8XW0OMxfsTxKVtgb58ks5b8tiVOy1AGaLdqQ8iPdew/otSPP8N8o9JJ0oJ4Zlu2pSQS5kgmLlhQ9tP2RylGCU6zd1N9pIf9V6wZes5146rCyZ1SSWyAMpK8rKu58ua4aZh21/Xagf1WZc; _abck=FD28302E5DC6333B534096D7173FE168~0~YAAQhklyaJaXxwqWAQAA6UvsMQ16zglyU6ALyvL2iC7GynTrfeGyaqzVwKTME12EDbd4cbTl5M5FXLdagHp7goWzBU1lETA3chrDNVwwpPygYHV4y3vqoGeeX3Jq0s17SnzJnuC7wQpr0kF24JxToEqS5m0HR2DxLcaEx8sx6vgMSkGFfH+bo108CLdIN1eFvKz9kiKwocHaLeADFC9fVeaxk+zpIZAMXuoR125ddsd+AixB5LOpFYlyAvCwVS4OdliP9wpi8L4zgq6MTRLn59OuT0I+noh5ENY3/9Qcuhy9we2TMyTYRM8FRz2qMFkVQTUGoHcNED73fpFEyiR+45B5opZfJ0fDAstc/T4XVmbUimRjbRMajQkc5RZkE71bdo/U7gXlAEU3gGuNprPZKdzvnLhVGMUtyZePbAOtUEjfcgQzBQJrgswC81xjY6/yG3d9WDbf01RJQZLrlOKU7BSR5sTqqjb50PJwmwuIGSyp8HjSwTzLDkkhD9jLxAe9c0yYUW6pBMoX/fKOXL/yp83Z4dPlEPZLVbsHzv9CrLz0qSIrwFsJ8Mes8dEh/sXu3/QPuekt39ewqmp6Qif5PQnnxM6GLtg+0sUEKnBYhzv45z2Sw1TmqLnHxul6p4FK8Gqr9cqzTGirW6Knc3PL83sVGf3vZ2z+90RaK19oHhO36OMgbiN9m6+yLnTH4TI4rxoDZNlRUAb3AWBqnS4o4aHd0pNVx1VDd6D2UEiCxVM+xaY=~-1~-1~-1; THD_PERSIST=C6%3d%7b%22I1%22%3a%222%22%7d%3a%3bC6%5fEXP%3d1747186387; _abck=FD28302E5DC6333B534096D7173FE168~-1~YAAQlUlyaHBqcQOWAQAAl8DtMQ2ns+iusmoG9cKgZmbx80CFnb6alIv/0dwwW8VzyGaDxtXKldHBOL/qx/Swrsr7HoSQL8X00sJulByaX3y01xr3bBfs6u9nu6bKraM86fGuxO7MCaMBhM8GS3VMx7Lj+FNqxA0Y+9D1lGdY/ZrfB8NzUADLPAF3eMclgg7UPUVS0ZuUptkRyaerIdW6UqpsuzAS8x9GZ5SLE/X1vEidQg1H0gMyRdKQYAJoYwJH1NdlGINQhjaqppFnvaug5PKcso0s0ylMixRK3r+rbIZu/4PQ6nVeR/kM5A9UzjM6temO7a+JzRqsrezV42Q4Y5jxf0we8iyx79QOZ4p33AItV7LnleYja/uvAuFIkb/jXyRDlr65YHbmuu01simCzR7vjdKtl5EsiqsKxPRZlh0m8m3t31JmeiQkEPgt7EI4jmMFtps12yNffZvX7f4ydYeXgPtLC/iF6l3QW3tA58+2+YWCWdRdQQXlAXSQqPqOVc2mACFgYAn5Su+lSeS0XI1oYMy2FoPb7vkSZHFBBjrdKHZswx2fe/wzIZhr6q+ENMSVYoLvE1ag5IdBJ2E/lRp6XfNPyjOoJNgSdr3ONU328UcUK/OLjAnFHc8DYi8py6qFwbejSFF/btFg9mEJwymq3DLgpZJCT1IFw3Mmm4/VHTm3HVry3HfFVjGKOKyW54rl61mXT3Vdp3hOJmpL1iFpHsNX3WhcW44PVl7CNSYdyW8=~0~-1~-1; ak_bmsc=2761D712CE92F55C4AF6D56DAF12D3F3~000000000000000000000000000000~YAAQzklyaDWpJAqWAQAAeFrrMRteFUXf/Zd+kqAX/YwfHNpWSZiDgSOElBxIHnW0MyOuSAV+OCHwi+lLhIFofaRFEQiPebwpwyieaONNZZ9IdpL4HoedxSofPu71r3XE96jiH0aXElp97RKIP4ldb+k0x8eymfH9ONaSeIQVrlnDDOuQYRjobIDYJ6oo29YMSzgA5w7FenAWwDVIfKCv6oFRCJqbG5013it5DSG131AooXuL5eEG3+B9TQpbRM0CgP9tSGYveif4AoD7a0b/gY28R3YI3yZ2n4rXKl6a2anPOlcJTQmyi+i3y58Kijfm1AP7ajegHP98N7OiFNCA9Q2UHrXLZ4vEpTlh5bC9/5g=; bm_s=YAAQzklyaDapJAqWAQAAeFrrMQOr6wFTdZo0gkmggstS9aLzQ5Y6WXzIxR2n4PJncgXItjwLjOm70DQp2IPOFUIdGQ0sELvhzD0RWFVxwXipSpSEFnB2bOeSuEEsJZaIS9MV4FOiadxvyuVSSUmBj8BxKm8pXrzlk3yk4+rsDg2LMrAciATDKjb8aS8MlnmDq9ErTDmI4M42hXr+EUNPMXNDei0SVJsG4Jc+cL+m9TBWf7nSf94Cjdu/m9sS8qwpo31qsWwt+BtkKV0BcXSwKDrP4K7irI/hP8IsVg7gNL/L3FL+ZInOGFO7l/ogLGRb0KkEnzdVKqDXO7wqdsu/kq1Y5tGbhIG6twBeQkbAJGSEIzrzuwmtA+QDqNiugJwxSFNasZ7IuDDHYgqhy89nCQlZUTP7+TlEW2QIwc7pY2HUdqMk2tjk5H8ubsh7yqmb6ky66fo03y7qkrk2nM4=; bm_ss=ab8e18ef4e; cart_activity=bc9251ff-1161-4a71-a42b-713adee89669'
+  },
+  data : data
+};
+
+axios.request(config)
+.then((response) => {
+  console.log(JSON.stringify(response.data));
+})
+.catch((error) => {
+  console.log(error);
+});

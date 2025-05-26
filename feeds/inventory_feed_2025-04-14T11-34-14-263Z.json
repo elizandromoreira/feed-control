@@ -1,0 +1,1509 @@
+{
+  "header": {
+    "sellerId": "A1SPSR0CFA01TC",
+    "version": "2.0",
+    "issueLocale": "en_US"
+  },
+  "messages": [
+    {
+      "messageId": 1,
+      "sku": "SE2B6564227",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 2,
+      "sku": "SE2B6344791",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 3,
+      "sku": "SE2B6562590",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 4,
+      "sku": "SE2B6332170",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 5,
+      "sku": "SE2B6572441",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 6,
+      "sku": "SE2B6593761",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 7,
+      "sku": "SE2B6550261",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 8,
+      "sku": "SE2B6549976",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 9,
+      "sku": "SE2B8021491",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 10,
+      "sku": "SE2B6593515",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 11,
+      "sku": "SE2B6549701",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 12,
+      "sku": "SE2B6501065",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 13,
+      "sku": "SE2B4215111",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 14,
+      "sku": "SE2B6561821",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 15,
+      "sku": "SE2B6571310",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 16,
+      "sku": "SE2B6465721",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 17,
+      "sku": "SE2B6565147",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 18,
+      "sku": "SE2B6583269",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 19,
+      "sku": "SE2B6594699",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 20,
+      "sku": "SE2B6528137",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 21,
+      "sku": "SE2B6456419",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 22,
+      "sku": "SE2B6585745",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 23,
+      "sku": "SE2B6578357",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 24,
+      "sku": "SE2B6550386",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 25,
+      "sku": "SE2B6572192",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 26,
+      "sku": "SE2B6560114",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 27,
+      "sku": "SE2B6535704",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 28,
+      "sku": "SE2B6356290",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 29,
+      "sku": "SE2B6514301",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 30,
+      "sku": "SE2B6520589",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 31,
+      "sku": "SE2B6482647",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 32,
+      "sku": "SE2B6483861",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 33,
+      "sku": "SE2B6442393",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 34,
+      "sku": "SE2B6578712",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 35,
+      "sku": "SE2B6566256",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 36,
+      "sku": "SE2B6455733",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 37,
+      "sku": "SE2B6594697",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 38,
+      "sku": "SE2B6585742",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 39,
+      "sku": "SE2B6577228",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 40,
+      "sku": "SE2B6551239",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 41,
+      "sku": "SE2B6572172",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 42,
+      "sku": "SE2B6531373",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 43,
+      "sku": "SE2B6550626",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 44,
+      "sku": "SE2B6595734",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 45,
+      "sku": "SE2B6431938",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 46,
+      "sku": "SE2B6525804",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 47,
+      "sku": "SE2B6548015",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 48,
+      "sku": "SE2B6576566",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 49,
+      "sku": "SE2B6577598",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 50,
+      "sku": "SE2B6514356",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 51,
+      "sku": "SE2B6562605",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 52,
+      "sku": "SE2B6583176",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 53,
+      "sku": "SE2B6483777",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 54,
+      "sku": "SE2B6594694",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 55,
+      "sku": "SE2B6465349",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 56,
+      "sku": "SE2B6577661",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 57,
+      "sku": "SE2B6577898",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 58,
+      "sku": "SE2B6559607",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 59,
+      "sku": "SE2B6557688",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 60,
+      "sku": "SE2B6579191",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 61,
+      "sku": "SE2B6576706",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 62,
+      "sku": "SE2B6532367",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 63,
+      "sku": "SE2B6585744",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 64,
+      "sku": "SE2B6580550",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 65,
+      "sku": "SE2B6533285",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 66,
+      "sku": "SE2B6473394",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 67,
+      "sku": "SE2B6577428",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 68,
+      "sku": "SE2B6577597",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 69,
+      "sku": "SE2B6486789",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 70,
+      "sku": "SE2B8974018",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 71,
+      "sku": "SE2B6535775",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 72,
+      "sku": "SE2B6595732",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 73,
+      "sku": "SE2B6576178",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 74,
+      "sku": "SE2B6602239",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 75,
+      "sku": "SE2B6582470",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 76,
+      "sku": "SE2B6551123",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 77,
+      "sku": "SE2B6509940",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 78,
+      "sku": "SE2B6406779",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 79,
+      "sku": "SE2B6406824",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 80,
+      "sku": "SE2B6558584",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 81,
+      "sku": "SE2B6465723",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 82,
+      "sku": "SE2B6586758",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 83,
+      "sku": "SE2B6564064",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 84,
+      "sku": "SE2B6561802",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 85,
+      "sku": "SE2B6501463",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 86,
+      "sku": "SE2B6477983",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 87,
+      "sku": "SE2B6533422",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 88,
+      "sku": "SE2B6517310",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 89,
+      "sku": "SE2B6576568",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 90,
+      "sku": "SE2B6576710",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 91,
+      "sku": "SE2B6583178",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 92,
+      "sku": "SE2B6602240",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 93,
+      "sku": "SE2B6470382",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 94,
+      "sku": "SE2B6439000",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 95,
+      "sku": "SE2B6477985",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 32,
+            "lead_time_to_ship_max_days": 4
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 96,
+      "sku": "SE2B6482010",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 97,
+      "sku": "SE2B6559635",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 98,
+      "sku": "SE2B6514359",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 5
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 99,
+      "sku": "SE2B7479197",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    },
+    {
+      "messageId": 100,
+      "sku": "SE2B6567963",
+      "operationType": "PARTIAL_UPDATE",
+      "productType": "PRODUCT",
+      "attributes": {
+        "fulfillment_availability": [
+          {
+            "fulfillment_channel_code": "DEFAULT",
+            "quantity": 0,
+            "lead_time_to_ship_max_days": 3
+          }
+        ]
+      }
+    }
+  ]
+}

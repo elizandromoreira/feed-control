@@ -1,0 +1,49 @@
+{
+  "name": "homedepot-sync",
+  "version": "1.0.0",
+  "description": "Sincronização de produtos entre Home Depot e Amazon Seller API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:debug": "node index.js --debug",
+    "phase1": "node index.js --phase 1",
+    "phase2": "node index.js --phase 2",
+    "cron": "node index.js --cron",
+    "lint": "eslint .",
+    "start:prod": "bash start-production.sh",
+    "start:prod:web": "NODE_ENV=production node index.js --web",
+    "start:prod:cron": "NODE_ENV=production node index.js --cron",
+    "start:prod:all": "NODE_ENV=production node index.js --web --cron"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "async-retry": "^1.3.3",
+    "axios": "^1.8.3",
+    "axios-retry": "^3.8.0",
+    "bottleneck": "^2.19.5",
+    "commander": "^11.1.0",
+    "compression": "^1.7.4",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "exponential-backoff": "^3.1.2",
+    "express": "^4.21.2",
+    "form-data": "^4.0.0",
+    "jsonschema": "^1.5.0",
+    "node-cron": "^3.0.3",
+    "p-queue": "^7.4.1",
+    "pg": "^8.14.0",
+    "pg-pool": "^3.6.1",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -1,0 +1,807 @@
+# Guia de Implementação de Novas Lojas no Feed Control
+
+Este documento fornece um guia detalhado para a implementação de novas lojas no sistema Feed Control, com base na implementação bem-sucedida da Vitacost. O guia abrange configurações de ambiente, implementação do provedor, manipulação de tempos de handling e flags de atualização, e soluções para problemas comuns.
+Todo o frontend deve ser feito em Ingles
+
+## Índice
+
+1. [Configuração Inicial](#1-configuração-inicial)
+2. [Variáveis de Ambiente](#2-variáveis-de-ambiente)
+3. [Implementação do Provedor](#3-implementação-do-provedor)
+4. [Manipulação de Tempos de Handling](#4-manipulação-de-tempos-de-handling)
+5. [Flags de Atualização](#5-flags-de-atualização)
+6. [Implementação das Fases](#6-implementação-das-fases)
+7. [Solução de Problemas Comuns](#7-solução-de-problemas-comuns)
+8. [Verificação e Testes](#8-verificação-e-testes)
+9. [Processamento de Respostas da Amazon](#9-processamento-de-respostas-da-amazon)
+10. [Implementação no Frontend](#10-implementação-no-frontend)
+11. [Gerenciamento de Recursos](#11-gerenciamento-de-recursos)
+
+## 1. Configuração Inicial
+
+### 1.1 Estrutura de Arquivos
+
+Cada nova loja requer os seguintes componentes:
+
+- Um arquivo de provedor dedicado em `backend/src/providers/nome-da-loja-provider.js`
+- Configurações específicas no arquivo `.env`
+- Ajustes no frontend para exibição no dashboard
+
+### 1.2 Banco de Dados
+
+Os produtos de cada loja são armazenados na mesma tabela `produtos`, diferenciados pelo campo `source`. Para uma nova loja, defina um valor único para o campo `source`.
+
+Exemplo para Vitacost:
+```sql
+-- Os produtos Vitacost são identificados com o valor 'Vitacost' no campo source
+SELECT * FROM produtos WHERE source = 'Vitacost';
+```
+
+## 2. Variáveis de Ambiente
+
+As configurações de cada loja devem ser definidas no arquivo `.env` do backend. É crucial manter a nomenclatura padronizada para garantir que o sistema funcione corretamente.
+
+### 2.1 Formato Padrão de Nomenclatura
+
+```
+[NOME_DA_LOJA]_API_BASE_URL=http://URL_da_API
+[NOME_DA_LOJA]_STOCK_LEVEL=número_mínimo_de_estoque
+[NOME_DA_LOJA]_BATCH_SIZE=tamanho_do_lote
+[NOME_DA_LOJA]_REQUESTS_PER_SECOND=requisições_por_segundo
+[NOME_DA_LOJA]_HANDLING_TIME_OMD=tempo_handling_omd
+[NOME_DA_LOJA]_HANDLING_TIME=tempo_handling_loja
+[NOME_DA_LOJA]_UPDATE_FLAG_VALUE=valor_flag_atualizacao
+```
+
+### 2.2 Exemplo de Configuração Completa
+
+Exemplo para todas as lojas atualmente implementadas:
+
+```
+# Configurações de Banco de Dados
+DB_NAME=postgres
+DB_USER=postgres.user
+DB_PASSWORD=senha_do_banco
+DB_HOST=aws-0-us-east-1.pooler.supabase.com
+DB_PORT=6543
+
+# Configurações Gerais
+DEBUG=false
+LEAD_TIME_OMD=2
+FIXED_LEAD_TIME_OUTOFSTOCK=20
+MAX_RETRIES=5
+BATCH_SIZE=100
+REQUESTS_PER_SECOND=6
+
+# URLs das APIs
+API_BASE_URL=http://167.114.223.83:3005/hd/api
+HOMEDEPOT_API_BASE_URL=http://167.114.223.83:3005/hd/api
+WHITECAP_API_BASE_URL=http://167.114.223.83:3005/wc/api
+VITACOST_API_BASE_URL=http://167.114.223.83:3005/vc
+
+# Configurações Home Depot
+HOMEDEPOT_STOCK_LEVEL=12
+HOMEDEPOT_BATCH_SIZE=100
+HOMEDEPOT_REQUESTS_PER_SECOND=8
+HOMEDEPOT_HANDLING_TIME_OMD=2
+HOMEDEPOT_UPDATE_FLAG_VALUE=1
+
+# Configurações White Cap
+WHITECAP_STOCK_LEVEL=7
+WHITECAP_BATCH_SIZE=240
+WHITECAP_REQUESTS_PER_SECOND=6
+WHITECAP_HANDLING_TIME_OMD=2
+WHITECAP_UPDATE_FLAG_VALUE=3
+
+# Configurações Vitacost
+VITACOST_STOCK_LEVEL=25
+VITACOST_BATCH_SIZE=100
+VITACOST_REQUESTS_PER_SECOND=6
+VITACOST_HANDLING_TIME_OMD=2
+VITACOST_HANDLING_TIME=3
+VITACOST_UPDATE_FLAG_VALUE=2
+```
+
+### 2.3 Valores Flag de Atualização
+
+É importante que cada loja tenha um valor único para `UPDATE_FLAG_VALUE` para evitar conflitos:
+
+- Home Depot: 1
+- Vitacost: 2
+- White Cap: 3
+- Nova Loja: Use um valor ainda não utilizado (4, 5, etc.)
+
+## 3. Implementação do Provedor
+
+A implementação do provedor deve ser feita no arquivo `backend/src/providers/nome-da-loja-provider.js`, seguindo o padrão estabelecido pela classe `BaseProvider`.
+
+### 3.1 Estrutura Básica do Provedor
+
+```javascript
+const BaseProvider = require('./provider-interface');
+const DatabaseService = require('../services/database');
+const { DB_CONFIG } = require('../config/db');
+const logger = require('../config/logging')();
+const axios = require('axios');
+const retry = require('async-retry');
+
+class NovaLojaProvider extends BaseProvider {
+  constructor(config = {}) {
+    super(config);
+    this.apiBaseUrl = config.apiBaseUrl || process.env.NOVALOJA_API_BASE_URL || 'URL_padrão';
+    this.dbService = new DatabaseService(DB_CONFIG);
+    
+    // Configurações específicas
+    this.stockLevel = parseInt(process.env.NOVALOJA_STOCK_LEVEL || process.env.STOCK_LEVEL || '5', 10);
+    this.handlingTimeOmd = parseInt(process.env.NOVALOJA_HANDLING_TIME_OMD || process.env.LEAD_TIME_OMD || '2', 10);
+    this.novaLojaHandlingTime = parseInt(process.env.NOVALOJA_HANDLING_TIME || '2', 10);
+    this.requestsPerSecond = parseInt(process.env.NOVALOJA_REQUESTS_PER_SECOND || process.env.REQUESTS_PER_SECOND || '7', 10);
+    this.updateFlagValue = parseInt(process.env.NOVALOJA_UPDATE_FLAG_VALUE || '4', 10);
+    
+    // Log configuration
+    logger.info(`Nova Loja Provider initialized with:`);
+    logger.info(`API Base URL: ${this.apiBaseUrl}`);
+    logger.info(`Stock Level: ${this.stockLevel}`);
+    logger.info(`Handling Time OMD: ${this.handlingTimeOmd}`);
+    logger.info(`Handling Time Nova Loja: ${this.novaLojaHandlingTime}`);
+    logger.info(`Requests Per Second: ${this.requestsPerSecond}`);
+    logger.info(`Update Flag Value: ${this.updateFlagValue}`);
+  }
+
+  getId() {
+    return 'novaloja';
+  }
+
+  getName() {
+    return 'Nova Loja';
+  }
+  
+  // Implemente os métodos obrigatórios...
+}
+
+module.exports = NovaLojaProvider;
+```
+
+### 3.2 Métodos Críticos a Implementar
+
+Os seguintes métodos devem ser implementados para cada provedor:
+
+1. **`_transformProductData`**: Responsável por transformar os dados da API em um formato padronizado para o banco de dados.
+2. **`getApiService`**: Fornece um serviço de API para o provedor.
+3. **`executePhase1`**: Responsável por obter e atualizar dados de produtos.
+4. **`executePhase2`**: Responsável por atualizar os produtos na Amazon.
+5. **`getPhase2Queries`**: Fornece consultas SQL para a Fase 2.
+
+## 4. Manipulação de Tempos de Handling
+
+A manipulação correta dos tempos de handling é crucial para o funcionamento do sistema.
+
+### 4.1 Estrutura Correta
+
+Cada loja deve implementar:
+
+1. **Tempo de handling da OMD**: Armazenado em `lead_time`
+2. **Tempo de handling da loja**: Armazenado em `lead_time_2`
+3. **Tempo de handling total para Amazon**: Armazenado em `handling_time_amz`
+
+### 4.2 Implementação no Método `_transformProductData`
+
+```javascript
+_transformProductData(apiData) {
+  try {
+    // Extrair dados da resposta da API...
+    
+    // Calcular tempos de handling
+    const omdHandlingTime = this.handlingTimeOmd;
+    const lojaHandlingTime = parseInt(apiData.leadTime || this.novaLojaHandlingTime, 10);
+    
+    return {
+      // Outros dados do produto...
+      omdHandlingTime: omdHandlingTime,
+      lojaHandlingTime: lojaHandlingTime,
+      // Não calcular a soma aqui, isso será feito no executePhase1
+    };
+  } catch (error) {
+    logger.error(`Error transforming product data: ${error.message}`, { error });
+    throw error;
+  }
+}
+```
+
+### 4.3 Atualização no Banco de Dados
+
+No método `executePhase1`, os tempos de handling devem ser atualizados corretamente:
+
+```javascript
+// Calcular o handling_time_amz como a soma dos dois tempos de manuseio
+let handlingTimeAmz = productData.lojaHandlingTime + productData.omdHandlingTime;
+if (handlingTimeAmz > 29) {
+  logger.warn(`Tempo de entrega excede o limite máximo: ${handlingTimeAmz} dias. Limitando a 29 dias.`);
+  handlingTimeAmz = 29;
+}
+
+// Update database with fetched data
+const updateQuery = `
+  UPDATE produtos 
+  SET 
+    supplier_price = $1, 
+    quantity = $2,
+    lead_time = $3,     // tempo de handling da OMD
+    lead_time_2 = $4,   // tempo de handling da loja
+    handling_time_amz = $5, // soma dos dois tempos
+    atualizado = $6, 
+    last_update = NOW(),
+    brand = $7
+  WHERE sku2 = $8 AND source = 'NovaLoja'
+`;
+
+await this.dbService.executeWithRetry(updateQuery, [
+  productData.price,
+  productData.quantity,
+  productData.omdHandlingTime.toString(),
+  productData.lojaHandlingTime,
+  handlingTimeAmz,
+  this.updateFlagValue,
+  productData.brand,
+  product.sku2
+]);
+```
+
+## 5. Flags de Atualização
+
+Os flags de atualização são usados para marcar produtos que precisam ser atualizados na Amazon durante a Fase 2.
+
+### 5.1 Implementação no Método `getPhase2Queries`
+
+```javascript
+getPhase2Queries() {
+  return {
+    extractUpdatedData: `
+      SELECT 
+        sku2, handling_time_amz, quantity 
+      FROM produtos 
+      WHERE atualizado = ${this.updateFlagValue} AND source = 'NovaLoja'
+    `,
+    resetUpdatedProducts: `
+      UPDATE produtos
+      SET atualizado = 0
+      WHERE atualizado = ${this.updateFlagValue} AND source = 'NovaLoja'
+    `
+  };
+}
+```
+
+### 5.2 Implementação no Método `executePhase2`
+
+```javascript
+async executePhase2(batchSize, checkInterval, checkCancellation, updateProgress) {
+  logger.info(`Running Phase 2 for ${this.getName()} provider`);
+  
+  // IMPORTANTE: Forçar o tamanho do batch para 9990 sempre, independente do valor passado
+  // Isso garante compatibilidade com as regras da Amazon SP-API
+  const fixedBatchSize = 9990;
+  if (batchSize !== fixedBatchSize) {
+    logger.info(`Adjusting batch size from ${batchSize} to fixed value of ${fixedBatchSize} for Amazon compatibility`);
+    batchSize = fixedBatchSize;
+  }
+  
+  try {
+    // Definir a variável de ambiente para o phase2.js
+    process.env.CURRENT_PROVIDER_ID = 'novaloja';
+    process.env.NOVALOJA_UPDATE_FLAG_VALUE = this.updateFlagValue.toString();
+    
+    // Antes de chamar o phase2, garantir que estamos conectados ao banco
+    await this.init();
+    
+    // Chamar a implementação padrão do Phase2
+    const result = await require('../phases/phase2').mainPhase2(
+      batchSize,
+      checkInterval,
+      checkCancellation,
+      updateProgress
+    );
+    
+    // Retornar resultados
+    return {
+      success: result,
+      totalProducts: updateProgress ? updateProgress.totalProducts : 0,
+      successCount: updateProgress ? updateProgress.successCount : 0,
+      failCount: updateProgress ? updateProgress.failCount : 0,
+      reportJson: updateProgress && updateProgress.reportJson ? updateProgress.reportJson : null
+    };
+  } catch (error) {
+    logger.error(`Error in ${this.getName()} Phase 2: ${error.message}`, { error });
+    throw error;
+  }
+}
+```
+
+## 6. Implementação das Fases
+
+### 6.1 Fase 1: Obtenção e Atualização de Dados
+
+A Fase 1 consiste em:
+
+1. Obter produtos da loja do banco de dados
+2. Para cada produto:
+   - Buscar dados atualizados da API
+   - Comparar com os dados existentes
+   - Atualizar o banco de dados se houver mudanças
+   - Marcar produtos para atualização na Amazon (definindo `atualizado = updateFlagValue`)
+
+### 6.2 Fase 2: Atualização na Amazon
+
+A Fase 2 consiste em:
+
+1. Buscar produtos marcados para atualização (`atualizado = updateFlagValue`)
+2. Agrupar em lotes para envio à Amazon (tamanho fixo de 9990 itens)
+3. Criar feed de inventário para a Amazon
+4. Enviar feed para a Amazon
+5. Processar resposta e resetar flags de atualização
+
+## 7. Solução de Problemas Comuns
+
+### 7.1 Problema: Handling Times Indefinidos
+
+**Sintoma**: Logs mostrando "undefined" para handling times.
+
+**Solução**: Garantir que os tempos de handling sejam extraídos e calculados corretamente:
+
+```javascript
+// No método executePhase1
+if (currentProduct) {
+  // Normalizar handling time para comparação
+  const currentHandlingTime = Number(currentProduct.handling_time_amz || 0);
+  const calculatedHandlingTime = productData.lojaHandlingTime + productData.omdHandlingTime;
+  
+  if (currentHandlingTime !== calculatedHandlingTime) {
+    logger.info(`Produto ${product.sku2}: Handling Time: ${currentProduct.handling_time_amz || 'N/A'} ----> ${calculatedHandlingTime}`);
+    hasChanges = true;
+  }
+}
+```
+
+### 7.2 Problema: Produtos Não Marcados para Atualização
+
+**Sintoma**: Produtos com mudanças não aparecem na Fase 2.
+
+**Solução**: Verificar a definição do flag de atualização:
+
+```javascript
+// Log detalhado do valor do flag de atualização
+logger.info(`UPDATE para ${product.sku2}: Definindo 'atualizado' = ${this.updateFlagValue} (NOVALOJA_UPDATE_FLAG_VALUE = ${process.env.NOVALOJA_UPDATE_FLAG_VALUE})`);
+```
+
+### 7.3 Problema: Variáveis de Ambiente Não Carregadas
+
+**Sintoma**: Valores padrão sendo usados em vez dos valores configurados.
+
+**Solução**: Implementar a função `ensureEnvConfigLoaded` no `backend/index.js`:
+
+```javascript
+async function ensureEnvConfigLoaded() {
+  try {
+    logger.info('Verificando e aplicando configurações do arquivo .env...');
+    
+    // Verificar se as variáveis estão acessíveis
+    const novaLojaUpdateFlag = process.env.NOVALOJA_UPDATE_FLAG_VALUE;
+    const novaLojaHandlingTime = process.env.NOVALOJA_HANDLING_TIME;
+    
+    // Log das variáveis principais
+    logger.info(`NOVALOJA_UPDATE_FLAG_VALUE: ${novaLojaUpdateFlag || 'NÃO DEFINIDO'}`);
+    logger.info(`NOVALOJA_HANDLING_TIME: ${novaLojaHandlingTime || 'NÃO DEFINIDO'}`);
+    
+    // Forçar valores padrão para variáveis críticas se não estiverem definidas
+    if (!novaLojaUpdateFlag) {
+      process.env.NOVALOJA_UPDATE_FLAG_VALUE = '4';
+      logger.info('NOVALOJA_UPDATE_FLAG_VALUE não encontrado, definindo como 4');
+    }
+    
+    if (!novaLojaHandlingTime) {
+      process.env.NOVALOJA_HANDLING_TIME = '2';
+      logger.info('NOVALOJA_HANDLING_TIME não encontrado, definindo como 2');
+    }
+    
+    logger.info('Configurações do .env verificadas e aplicadas.');
+  } catch (error) {
+    logger.error(`Erro ao processar configurações do .env: ${error.message}`);
+  }
+}
+
+// Chamar a função no início da aplicação
+async function main() {
+  try {
+    // Configurar o logger e verificar/garantir as configurações do .env
+    await ensureEnvConfigLoaded();
+    
+    // Resto do código de inicialização...
+  } catch (error) {
+    logger.error(`Error in main: ${error.message}`, { error });
+    process.exit(1);
+  }
+}
+```
+
+### 7.4 Problema: Configurações de Loja Não Persistem Entre Reloads
+
+**Sintoma**: Configurações da loja são perdidas quando a página é recarregada.
+
+**Solução**: Implementar endpoints GET/POST para configurações e atualizar o frontend para usá-los:
+
+1. **Adicionar um endpoint GET para obter configurações**:
+
+```javascript
+// Obter configuração de uma loja
+app.get('/api/stores/:storeId/config', async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    
+    // Verificar se a loja existe
+    const storeManager = await getStoreManager();
+    const store = storeManager.getStoreById(storeId);
+    
+    if (!store) {
+      return res.status(404).json({ message: 'Loja não encontrada' });
+    }
+    
+    // Prefixo para variáveis específicas da loja no .env
+    const storePrefix = storeId.toUpperCase().replace(/-/g, '_');
+    
+    // Construir objeto de configuração a partir das variáveis de ambiente
+    const config = {
+      stockLevel: parseInt(process.env[`${storePrefix}_STOCK_LEVEL`] || process.env.STOCK_LEVEL || '5', 10),
+      batchSize: parseInt(process.env[`${storePrefix}_BATCH_SIZE`] || process.env.BATCH_SIZE || '240', 10),
+      requestsPerSecond: parseInt(process.env[`${storePrefix}_REQUESTS_PER_SECOND`] || process.env.REQUESTS_PER_SECOND || '7', 10),
+      handlingTimeOmd: parseInt(process.env[`${storePrefix}_HANDLING_TIME_OMD`] || process.env.LEAD_TIME_OMD || '2', 10),
+      updateFlagValue: parseInt(process.env[`${storePrefix}_UPDATE_FLAG_VALUE`] || '1', 10)
+    };
+    
+    // Adicionar configurações específicas de cada fornecedor
+    if (storeId === 'homedepot') {
+      config.homeDepotHandlingTime = parseInt(process.env.HOMEDEPOT_HANDLING_TIME || '2', 10);
+    } else if (storeId === 'whitecap') {
+      config.whiteCapHandlingTime = parseInt(process.env.WHITECAP_HANDLING_TIME || '2', 10);
+    } else if (storeId === 'vitacost') {
+      config.vitacostHandlingTime = parseInt(process.env.VITACOST_HANDLING_TIME || '2', 10);
+    } else if (storeId === 'novaloja') {
+      config.novaLojaHandlingTime = parseInt(process.env.NOVALOJA_HANDLING_TIME || '2', 10);
+    }
+    
+    logger.info(`Returning configuration for store ${storeId}`);
+    res.json(config);
+  } catch (error) {
+    logger.error(`Error fetching configuration: ${error.message}`);
+    res.status(500).json({ message: 'Erro ao obter configuração da loja', error: error.message });
+  }
+});
+```
+
+2. **Modificar o endpoint POST de configurações**:
+
+```javascript
+// Atualizar configurações de uma loja
+app.post('/api/stores/:storeId/config', async (req, res) => {
+  const { storeId } = req.params;
+  const { 
+    stockLevel = 5, 
+    batchSize = 240, 
+    requestsPerSecond = 7, 
+    handlingTimeOmd = 2, 
+    homeDepotHandlingTime, 
+    whiteCapHandlingTime, 
+    vitacostHandlingTime,
+    novaLojaHandlingTime,
+    updateFlagValue = 1
+  } = req.body;
+  
+  // Código de validação e verificação da loja...
+  
+  // Atualizar cada variável específica no arquivo .env
+  if (storeId === 'homedepot' && homeDepotHandlingTime) {
+    envConfig.HOMEDEPOT_HANDLING_TIME = homeDepotHandlingTime.toString();
+  }
+  
+  if (storeId === 'whitecap' && whiteCapHandlingTime) {
+    envConfig.WHITECAP_HANDLING_TIME = whiteCapHandlingTime.toString();
+  }
+  
+  if (storeId === 'vitacost' && vitacostHandlingTime) {
+    envConfig.VITACOST_HANDLING_TIME = vitacostHandlingTime.toString();
+  }
+  
+  if (storeId === 'novaloja' && novaLojaHandlingTime) {
+    envConfig.NOVALOJA_HANDLING_TIME = novaLojaHandlingTime.toString();
+  }
+  
+  // Código para salvar o arquivo .env e retornar resposta...
+});
+```
+
+3. **Atualizar o frontend para carregar configurações ao iniciar**:
+
+```javascript
+// No componente StoreDashboard.tsx
+useEffect(() => {
+  // Código existente...
+  
+  // Buscar configurações da loja
+  try {
+    const configResponse = await axios.get(`${API_URL}/stores/${id}/config`);
+    if (configResponse.data) {
+      console.log('Configurações carregadas do servidor:', configResponse.data);
+      setConfig(configResponse.data);
+    }
+  } catch (configError) {
+    console.error('Erro ao buscar configurações:', configError);
+    // Manter configurações padrão se ocorrer um erro
+  }
+  
+  // Código existente...
+}, [id]);
+```
+
+### 7.5 Problema: Erro "Called end on pool more than once"
+
+**Sintoma**: Logs mostrando erro de fechamento duplo da conexão com o banco de dados.
+
+**Solução**: Tornar o método `close()` do `DatabaseService` idempotente:
+
+```javascript
+/**
+ * Fecha o pool de conexões
+ * @returns {Promise<void>}
+ */
+async close() {
+  try {
+    // Verificar se o pool ainda existe e não foi fechado
+    if (this.pool && !this.pool._ending && !this.pool._closed) {
+      await this.pool.end();
+      logger.info('Database pool closed');
+    } else if (this.pool && (this.pool._ending || this.pool._closed)) {
+      logger.info('Database pool already closing or closed');
+    } else {
+      logger.info('Database pool not initialized');
+    }
+  } catch (error) {
+    // Se o erro for sobre tentar fechar um pool já fechado, apenas logar
+    if (error.message && error.message.includes('end on pool more than once')) {
+      logger.info('Database pool was already closed');
+    } else {
+      // Para outros erros, logar como erro
+      logger.error(`Error closing database pool: ${error.message}`);
+    }
+  } finally {
+    // Garantir que o pool seja definido como null para evitar tentativas futuras de uso
+    this.pool = null;
+  }
+}
+```
+
+E também melhorar o método `close()` do provedor:
+
+```javascript
+/**
+ * Close the database connection
+ */
+async close() {
+  if (this.dbInitialized) {
+    try {
+      await this.dbService.close();
+      logger.info(`Database connection closed for ${this.getName()} provider`);
+    } catch (error) {
+      // Se o erro for sobre fechar a conexão mais de uma vez, apenas logamos e continuamos
+      if (error.message && error.message.includes('Called end on pool more than once')) {
+        logger.info(`Database connection for ${this.getName()} provider was already closed`);
+      } else {
+        // Se for outro tipo de erro, propagamos
+        throw error;
+      }
+    } finally {
+      // Garantimos que o estado seja atualizado independentemente do resultado
+      this.dbInitialized = false;
+    }
+  } else {
+    logger.info(`Database connection for ${this.getName()} provider was already closed or never initialized`);
+  }
+}
+```
+
+### 7.6 Problema: Produtos Com Erro 500 Não São Processados
+
+**Sintoma**: Produtos que retornam erro 500 da API não são tratados adequadamente.
+
+**Solução**: Adicionar tratamento específico para erros 500, marcando produtos como fora de estoque:
+
+```javascript
+// No método que processa produtos
+try {
+  const productData = await apiService.fetchProductDataWithRetry(product.sku);
+  // Processamento normal...
+} catch (error) {
+  logger.error(`Error processing product ${product.sku}: ${error.message}`);
+  
+  // Tratar erros 500 especificamente
+  if (error.message.includes('status code 500')) {
+    try {
+      logger.info(`Produto ${product.sku} com erro 500 da API: Marcando como fora de estoque (quantity=0) para atualização na Amazon`);
+      
+      // Buscar produto atual para obter dados necessários
+      const currentProduct = await this.dbService.fetchRowWithRetry(
+        'SELECT supplier_price, lead_time, lead_time_2, brand FROM produtos WHERE sku2 = $1 AND source = $2',
+        [product.sku2, 'Nova Loja']
+      );
+      
+      if (currentProduct) {
+        // Preparar dados para atualização
+        const lead_time = currentProduct.lead_time || this.handlingTimeOmd.toString();
+        const lead_time_2 = currentProduct.lead_time_2 || this.novaLojaHandlingTime;
+        
+        // Calcular handling_time_amz
+        let handlingTimeAmz = parseInt(lead_time_2, 10) + parseInt(lead_time, 10);
+        if (handlingTimeAmz > 29) {
+          handlingTimeAmz = 29;
+        }
+        
+        // Atualizar para quantidade zero (fora de estoque)
+        const updateQuery = `
+          UPDATE produtos 
+          SET 
+            quantity = 0,
+            lead_time = $1,
+            lead_time_2 = $2,
+            handling_time_amz = $3,
+            atualizado = $4,
+            last_update = NOW()
+          WHERE sku2 = $5 AND source = 'Nova Loja'
+        `;
+        
+        await this.dbService.executeWithRetry(updateQuery, [
+          lead_time,
+          lead_time_2,
+          handlingTimeAmz,
+          this.updateFlagValue,
+          product.sku2
+        ]);
+        
+        logger.info(`Produto ${product.sku} marcado como fora de estoque e definido para atualização na Amazon`);
+        progress.updatedProducts++;
+        this.outOfStockCount++;
+      }
+    } catch (dbError) {
+      logger.error(`Erro ao marcar produto ${product.sku} como fora de estoque: ${dbError.message}`);
+    }
+  }
+  
+  // Continuar com o processamento normal de erros...
+}
+```
+
+### 7.7 Problema: Store Não Sendo Reconhecida na Fase 2
+
+**Sintoma**: Os produtos atualizados da loja não são encontrados na fase 2, mesmo com registros corretos na fase 1.
+
+**Solução**: Garantir que ambas as funções `extractUpdatedData` e `resetUpdatedProductsMark` no arquivo `phase2.js` incluam a nova loja:
+
+```javascript
+// Na função extractUpdatedData
+async function extractUpdatedData(currentProviderId, updateFlagValue) {
+  // Código existente...
+  
+  let providerName = 'Home Depot'; // Valor padrão
+  
+  // Determinar o nome do provedor com base no ID
+  if (currentProviderId === 'vitacost') {
+    providerName = 'Vitacost';
+  } else if (currentProviderId === 'whitecap') {
+    providerName = 'White Cap';
+  } else if (currentProviderId === 'novaloja') {
+    providerName = 'Nova Loja';
+  }
+  
+  // Código existente...
+}
+
+// Na função resetUpdatedProductsMark
+async function resetUpdatedProductsMark(currentProviderId, updateFlagValue) {
+  // Código existente...
+  
+  let providerName = 'Home Depot'; // Valor padrão
+  
+  // Determinar o nome do provedor com base no ID
+  if (currentProviderId === 'vitacost') {
+    providerName = 'Vitacost';
+  } else if (currentProviderId === 'whitecap') {
+    providerName = 'White Cap';
+  } else if (currentProviderId === 'novaloja') {
+    providerName = 'Nova Loja';
+  }
+  
+  // Código existente...
+}
+```
+
+### 7.8 Problema: Perda de Informação de Última Sincronização
+
+**Sintoma**: O campo "Last synchronized" no dashboard principal some após reiniciar o servidor.
+
+**Solução**: Melhorar o salvamento da data de última sincronização no `StoreManager`:
+
+```javascript
+// No arquivo storeManager.js
+async updateLastSync(id) {
+  const index = this.stores.findIndex(store => store.id === id);
+  
+  if (index === -1) {
+    logger.warn(`Store with ID ${id} not found`);
+    return false;
+  }
+  
+  // Definir a data de última sincronização
+  this.stores[index].lastSync = new Date().toISOString();
+  
+  // Garantir que a informação seja salva no arquivo persistente
+  try {
+    await this.saveStores();
+    logger.info(`Updated lastSync for store ${id}: ${this.stores[index].lastSync}`);
+    return true;
+  } catch (error) {
+    logger.error(`Error saving lastSync for store ${id}: ${error.message}`);
+    return false;
+  }
+}
+```
+
+Também modifique a função `loadStores` para preservar as informações de lastSync durante o carregamento:
+
+```javascript
+async loadStores() {
+  try {
+    // Código existente...
+    
+    // Converter os objetos JSON para instâncias de Store
+    this.stores = storesData.map(store => {
+      const storeInstance = new Store(
+        store.id,
+        store.name,
+        store.apiBaseUrl,
+        store.status,
+        store.scheduleInterval
+      );
+      
+      // Preservar a informação de última sincronização se existir
+      if (store.lastSync) {
+        storeInstance.lastSync = store.lastSync;
+      }
+      
+      return storeInstance;
+    });
+    
+    // Código existente...
+  } catch (error) {
+    // Código existente...
+  }
+}
+```
+
+## IMPORTANTE
+
+NÃO FAZER ALTERAÇOES NAS LOJAS QUE JA ESTÃO IMPLANTADAS, ISSO É PRIMORDIAL. 
+
+### ATENÇÃO AO TAMANHO DE LOTE PARA A AMAZON
+
+O tamanho do lote (batch) para envio à Amazon SP-API deve ser **SEMPRE** fixado em 9990 itens, independentemente do valor configurado. Esta restrição garante compatibilidade com os limites da API da Amazon e previne erros de processamento.
+
+```javascript
+// IMPORTANTE: Forçar o tamanho do batch para 9990 sempre
+const fixedBatchSize = 9990;
+if (batchSize !== fixedBatchSize) {
+  logger.info(`Adjusting batch size from ${batchSize} to fixed value of ${fixedBatchSize} for Amazon compatibility`);
+  batchSize = fixedBatchSize;
+}
+```
+
+### ATENÇÃO AO FECHAMENTO DE RECURSOS
+
+Sempre implemente o método `close()` em seu provedor para evitar erros como:
+- `Error synchronizing store: Method close() must be implemented`
+- `Error closing provider connection: provider is not defined` 
