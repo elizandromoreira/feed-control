@@ -6,7 +6,7 @@ interface HomeDepotConfigProps {
     batchSize: number;
     requestsPerSecond: number;
     handlingTimeOmd: number;
-    homeDepotHandlingTime: number;
+    providerSpecificHandlingTime: number;
     updateFlagValue: number;
   };
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -26,7 +26,7 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
           id="stockLevel"
           type="number"
           name="stockLevel"
-          value={config.stockLevel}
+          value={config.stockLevel || ''}
           onChange={onChange}
           className="input"
           aria-label="Nível de estoque"
@@ -41,7 +41,7 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
           id="handlingTimeOmd"
           type="number"
           name="handlingTimeOmd"
-          value={config.handlingTimeOmd}
+          value={config.handlingTimeOmd || ''}
           onChange={onChange}
           className="input"
           aria-label="Tempo de manuseio da OMD em dias"
@@ -55,8 +55,8 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
         <input
           id="homeDepotHandlingTime"
           type="number"
-          name="homeDepotHandlingTime"
-          value={config.homeDepotHandlingTime}
+          name="providerSpecificHandlingTime"
+          value={config.providerSpecificHandlingTime || ''}
           disabled={true}
           className="input bg-gray-100 cursor-not-allowed"
           aria-label="Tempo de manuseio da Home Depot em dias (calculado automaticamente)"
@@ -74,7 +74,7 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
           id="batchSize"
           type="number"
           name="batchSize"
-          value={config.batchSize}
+          value={config.batchSize || ''}
           onChange={onChange}
           className="input"
           aria-label="Tamanho do lote"
@@ -89,7 +89,7 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
           id="requestsPerSecond"
           type="number"
           name="requestsPerSecond"
-          value={config.requestsPerSecond}
+          value={config.requestsPerSecond || ''}
           onChange={onChange}
           className="input"
           aria-label="Requisições por segundo"
@@ -104,7 +104,7 @@ const HomeDepotConfig: React.FC<HomeDepotConfigProps> = ({ config, onChange }) =
           id="updateFlagValue"
           type="number"
           name="updateFlagValue"
-          value={config.updateFlagValue}
+          value={config.updateFlagValue || ''}
           onChange={onChange}
           className="input"
           aria-label="Código de atualização Home Depot"

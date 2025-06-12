@@ -337,39 +337,6 @@ class HomeDepotProvider extends BaseProvider {
             failedProductsFile,
         };
     }
-    
-    async executePhase2(batchSize, checkInterval, checkCancellation, updateProgress) {
-        logger.info(`Running Phase 2 for ${this.getName()} provider`);
-        const phase2 = require('../phases/phase2'); // Lazy load phase2
-        
-        const fixedBatchSize = batchSize || 9990;
-        
-        try {
-            await this.init();
-            process.env.CURRENT_PROVIDER_ID = 'homedepot';
-            process.env.HOMEDEPOT_UPDATE_FLAG_VALUE = this.updateFlagValue.toString();
-            
-            const result = await phase2.mainPhase2(
-                fixedBatchSize,
-                checkInterval,
-                checkCancellation,
-                updateProgress
-            );
-            
-            return {
-                success: result,
-                totalProducts: updateProgress ? updateProgress.totalProducts : 0,
-                successCount: updateProgress ? updateProgress.successCount : 0,
-                failCount: updateProgress ? updateProgress.failCount : 0,
-            };
-        } catch (error) {
-            logger.error(`Error in ${this.getName()} Phase 2: ${error.message}`, { error });
-            throw error;
-        } finally {
-            await this.close();
-        }
-    }
-
 
     getPhase2Queries() {
       return {
@@ -387,4 +354,4 @@ class HomeDepotProvider extends BaseProvider {
     }
 }
 
-module.exports = HomeDepotProvider; 
+module.exports = HomeDepotProvider;

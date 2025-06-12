@@ -11,12 +11,8 @@ interface ConfigProps {
   batchSize: number;
   requestsPerSecond: number;
   handlingTimeOmd: number;
-  homeDepotHandlingTime: number;
-  whiteCapHandlingTime: number;
-  vitacostHandlingTime: number;
-  bestbuyHandlingTime: number;
-  webstaurantstoreHandlingTime: number;
-  updateFlagValue: number; // Novo campo para o código de atualização
+  providerSpecificHandlingTime: number;
+  updateFlagValue: number;
 }
 
 interface ProviderConfigFactoryProps {

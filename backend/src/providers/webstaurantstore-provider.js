@@ -35,7 +35,7 @@ class WebstaurantstoreProvider extends BaseProvider {
     logger.info(`LEAD_TIME_OMD (global env): ${process.env.LEAD_TIME_OMD}`);
     
     // Usar prioritariamente as variáveis específicas do provider, com fallback para variáveis genéricas
-    this.stockLevel = parseInt(process.env.WEBSTAURANTSTORE_STOCK_LEVEL || process.env.STOCK_LEVEL || '30', 10);
+    this.stockLevel = parseInt(process.env.WEBSTAURANTSTORE_STOCK_LEVEL || process.env.STOCK_LEVEL || '32', 10);
     this.batchSize = parseInt(process.env.WEBSTAURANTSTORE_BATCH_SIZE || process.env.BATCH_SIZE || '240', 10);
     this.handlingTimeOmd = parseInt(process.env.WEBSTAURANTSTORE_HANDLING_TIME_OMD || process.env.LEAD_TIME_OMD || '2', 10);
     this.webstaurantstoreHandlingTime = parseInt(process.env.WEBSTAURANTSTORE_HANDLING_TIME || '3', 10);
@@ -191,21 +191,22 @@ class WebstaurantstoreProvider extends BaseProvider {
    * @private
    */
   _transformProductData(apiData, sku) {
-    // Verificar isQuickShip primeiro (conforme código Python)
-    const isQuickShip = apiData.isQuickShip !== false; // Se não estiver definido, assume como true
+    // Verificar disponibilidade do produto baseado em AMBOS os campos
+    const isInStock = apiData.Availability === "InStock";
+    const isQuickShip = apiData.isQuickShip === true; // Deve ser explicitamente true
     
-    // Verificar disponibilidade do produto com base em isQuickShip e Availability
+    // Determinar quantidade e disponibilidade - precisa de AMBAS as condições
     let quantity = 0;
     let isAvailable = false;
     
-    if (!isQuickShip) {
-      // Se isQuickShip for false, produto está fora de estoque independente de Availability
+    if (isInStock && isQuickShip) {
+      // Produto está disponível apenas se AMBOS: Availability="InStock" E isQuickShip=true
+      isAvailable = true;
+      quantity = this.stockLevel; // Valor do .env (32)
+    } else {
+      // Se qualquer condição for falsa, produto fica fora de estoque
       isAvailable = false;
       quantity = 0;
-    } else {
-      // Caso contrário, verifica Availability normalmente
-      isAvailable = apiData.Availability === "InStock";
-      quantity = isAvailable ? this.stockLevel : 0;
     }
     
     if (isAvailable) {
@@ -214,7 +215,7 @@ class WebstaurantstoreProvider extends BaseProvider {
       this.outOfStockCount++;
     }
     
-    // Prioridade de preços: primeiro Member Price, depois Price (conforme código Python)
+    // Lógica de preços: priorizar Member Price, se for 0 usar Price
     let price = 0;
     const memberPrice = parseFloat(apiData["Member Price"] || 0);
     if (memberPrice > 0) {
@@ -223,12 +224,15 @@ class WebstaurantstoreProvider extends BaseProvider {
       price = parseFloat(apiData.Price || 0);
     }
     
-    // Usar tempos de handling específicos
+    // Usar tempos de handling específicos do .env
     const webstaurantstoreHandlingTime = this.webstaurantstoreHandlingTime;
     const omdHandlingTime = this.handlingTimeOmd;
     
     // Definir valor de availability explicitamente
     const availability = isAvailable ? 'inStock' : 'outOfStock';
+    
+    // Log para debug
+    logger.info(`Product ${sku}: Availability=${apiData.Availability}, isQuickShip=${apiData.isQuickShip}, Final: ${availability}, Quantity: ${quantity}, Price: ${price} (Member: ${memberPrice}, Regular: ${apiData.Price})`);
     
     // Retornar dados transformados
     return {

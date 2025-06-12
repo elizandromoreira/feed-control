@@ -1,0 +1,15 @@
+[Unit]
+Description=Feed Control Application
+After=network.target
+
+[Service]
+Type=forking
+User=root
+WorkingDirectory=/opt/feed-control
+ExecStart=/opt/feed-control/start-feedcontrol-screens.sh
+ExecStop=/usr/bin/screen -S feedcontrol-backend -X quit && /usr/bin/screen -S feedcontrol-frontend -X quit
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

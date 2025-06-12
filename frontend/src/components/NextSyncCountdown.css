@@ -1,0 +1,68 @@
+.digital-countdown {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  color: #2563eb;
+  margin-left: 4px;
+}
+
+.timer-spacer {
+  display: inline-block;
+  width: 4px;
+}
+
+.timer-digits {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.digit-group {
+  display: inline-block;
+  min-width: 1.2em;
+  text-align: center;
+}
+
+.digit-separator {
+  display: inline-block;
+  margin: 0 1px;
+  animation: blink 1s infinite;
+}
+
+/* Animação de piscada para os separadores */
+@keyframes blink {
+  0% { opacity: 1; }
+  49% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Animação de tique-taque */
+@keyframes tick {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Cores e efeitos baseados no tempo restante */
+.countdown-urgent {
+  color: #ef4444;
+  animation: tick 0.8s infinite;
+}
+
+.countdown-warning {
+  color: #f59e0b;
+}
+
+/* Animação para os dígitos que estão mudando */
+@keyframes change {
+  0% { transform: translateY(0); }
+  10% { transform: translateY(-2px); }
+  20% { transform: translateY(0); }
+}
+
+.digit-group:last-child {
+  animation: change 1s infinite;
+}

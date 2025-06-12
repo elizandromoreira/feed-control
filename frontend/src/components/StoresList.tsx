@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import NextSyncTimer from './NextSyncTimer';
+import { NextSyncCountdown } from './NextSyncCountdown';
 
-// URL da API do Node.js para a Home Depot Sync
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:7005/api';
+// A URL da API foi fixada para garantir a comunicação com o backend na porta 7005.
+const API_URL = 'http://localhost:7005/api';
 
 interface Store {
   id: string;
   name: string;
   status: string;
   lastSync: string | null;
+  schedule: {
+    isActive: boolean;
+    interval: number | null;
+  };
 }
 
 export const StoresList: React.FC = () => {
@@ -18,23 +22,22 @@ export const StoresList: React.FC = () => {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const fetchStores = async () => {
       try {
         // Tentar obter os dados da API
-        const response = await axios.get(`${API_URL}/stores`);
+        const response = await axios.get(`${API_URL}/stores`, {
+          // Adicionar timestamp para evitar cache
+          params: { _t: new Date().getTime() }
+        });
         
-        // Mapear os dados da API para o formato esperado pelo componente
-        const storesData = response.data.map((store: any) => ({
-          id: store.id,
-          name: store.name,
-          status: store.status === 'Ativo' || store.status === 'Executando' ? 'running' : 'stopped',
-          lastSync: store.lastSync
-        }));
+        // A API /stores retorna um array com objetos contendo id e name
+        const storesData: Store[] = response.data;
         
         // Verificar se os dados obtidos têm o formato esperado
-        if (Array.isArray(storesData) && storesData.length > 0) {
+        if (Array.isArray(storesData)) {
           setStores(storesData);
           // Remover mensagem de erro caso existente
           if (error) setError(null);
@@ -50,31 +53,26 @@ export const StoresList: React.FC = () => {
         if (stores.length > 0) {
           setError('Aviso: Não foi possível atualizar os dados das lojas. Exibindo dados existentes.');
         } else {
-          // Se não temos dados, mostramos um erro e usamos dados de fallback
-          setError('Não foi possível carregar as lojas. Por favor, verifique se o servidor está rodando.');
-          
-          // Fallback para desenvolvimento - dados simulados com IDs correspondentes ao backend
-          setStores([
-            { id: 'homedepot', name: 'Home Depot', status: 'stopped', lastSync: null },
-            { id: 'bestbuy', name: 'Best Buy', status: 'stopped', lastSync: null },
-            { id: 'zoro', name: 'Zoro', status: 'stopped', lastSync: null },
-            { id: 'vitacost', name: 'Vitacost', status: 'stopped', lastSync: null },
-            { id: 'webstaurantstore', name: 'Webstaurantstore', status: 'stopped', lastSync: null },
-            { id: 'whitecap', name: 'White Cap', status: 'stopped', lastSync: null },
-          ]);
+          setError('Erro ao carregar lojas. Tente novamente mais tarde.');
+          setLoading(false);
         }
-        
-        setLoading(false);
       }
     };
 
+    // Buscar dados imediatamente
     fetchStores();
     
-    // Atualizar a lista de lojas a cada 15 segundos
-    const interval = setInterval(fetchStores, 15000);
+    // Configurar polling para atualizar os dados a cada 60 segundos (aumentado de 30 para reduzir carga)
+    const intervalId = setInterval(fetchStores, 60000);
+    setPollingInterval(intervalId);
     
-    return () => clearInterval(interval);
-  }, []);
+    // Limpar o intervalo quando o componente for desmontado
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, []); // Dependência vazia para executar apenas na montagem
 
   const handleNavigateToStore = (id: string) => {
     navigate(`/store/${id}`);
@@ -113,15 +111,26 @@ export const StoresList: React.FC = () => {
             </div>
             
             <div className="text-sm text-gray-600 mb-4">
-              Last synchronized: {store.lastSync ? new Date(store.lastSync).toLocaleString() : 'Never'}
+              <p>Last synchronized: {store.lastSync ? new Date(store.lastSync).toLocaleString() : 'Never'}</p>
+              <p>
+                Agendamento: 
+                {store.schedule && store.schedule.isActive 
+                  ? (
+                      <>
+                        <span className="text-green-600 font-semibold"> Ativo ({store.schedule.interval}h)</span>
+                        <NextSyncCountdown 
+                          isActive={store.schedule.isActive} 
+                          intervalHours={store.schedule.interval} 
+                          lastSync={store.lastSync} 
+                        />
+                      </>
+                    )
+                  : <span className="text-red-600 font-semibold"> Inativo</span>
+                }
+              </p>
             </div>
             
-            {/* Temporizador para a próxima sincronização */}
-            <div className="mb-4">
-              <NextSyncTimer storeId={store.id} />
-            </div>
-            
-            <div className="flex space-x-4">
+            <div className="mt-auto pt-4 flex space-x-4">
               <button
                 onClick={() => handleNavigateToStore(store.id)}
                 className="btn btn-primary flex-1"

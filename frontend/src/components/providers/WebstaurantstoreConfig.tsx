@@ -6,7 +6,7 @@ interface ConfigProps {
   batchSize: number;
   requestsPerSecond: number;
   handlingTimeOmd: number;
-  webstaurantstoreHandlingTime: number;
+  providerSpecificHandlingTime: number;
   updateFlagValue: number;
 }
 
@@ -29,7 +29,7 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
           id="stockLevel"
           type="number"
           name="stockLevel"
-          value={config.stockLevel}
+          value={config.stockLevel || ''}
           onChange={onChange}
           className="input"
           aria-label="Nível de estoque Webstaurantstore"
@@ -47,7 +47,7 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
           id="handlingTimeOmd"
           type="number"
           name="handlingTimeOmd"
-          value={config.handlingTimeOmd}
+          value={config.handlingTimeOmd || ''}
           onChange={onChange}
           className="input"
           aria-label="Tempo de manuseio da OMD em dias"
@@ -64,8 +64,8 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
         <input
           id="webstaurantstoreHandlingTime"
           type="number"
-          name="webstaurantstoreHandlingTime"
-          value={config.webstaurantstoreHandlingTime}
+          name="providerSpecificHandlingTime"
+          value={config.providerSpecificHandlingTime || ''}
           onChange={onChange}
           className="input"
           aria-label="Tempo de manuseio Webstaurantstore em dias"
@@ -83,7 +83,7 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
           id="batchSize"
           type="number"
           name="batchSize"
-          value={config.batchSize}
+          value={config.batchSize || ''}
           onChange={onChange}
           className="input"
           aria-label="Tamanho do lote"
@@ -101,7 +101,7 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
           id="requestsPerSecond"
           type="number"
           name="requestsPerSecond"
-          value={config.requestsPerSecond}
+          value={config.requestsPerSecond || ''}
           onChange={onChange}
           className="input"
           aria-label="Requisições por segundo"
@@ -119,7 +119,7 @@ const WebstaurantstoreConfig: React.FC<WebstaurantstoreConfigProps> = ({ config,
           id="updateFlagValue"
           type="number"
           name="updateFlagValue"
-          value={config.updateFlagValue}
+          value={config.updateFlagValue || ''}
           onChange={onChange}
           className="input"
           aria-label="Código de atualização Webstaurantstore"

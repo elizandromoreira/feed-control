@@ -23,14 +23,21 @@ class DatabaseService {
     // Log das configurações do banco de dados (sem a senha)
     logger.info(`Connecting to database ${dbConfig.database} at ${dbConfig.host}:${dbConfig.port} as ${dbConfig.user}`);
     
+    this.dbConfig = dbConfig; // Salvar a configuração para recriar o pool se necessário
+    this.minSize = minSize;
+    this.maxSize = maxSize;
+    this._createPool(); // Chama um método interno para criar o pool
+  }
+
+  _createPool() {
     this.pool = new Pool({
-      user: dbConfig.user,
-      host: dbConfig.host,
-      database: dbConfig.database,
-      password: dbConfig.password,
-      port: dbConfig.port,
-      min: minSize,
-      max: maxSize,
+      user: this.dbConfig.user,
+      host: this.dbConfig.host,
+      database: this.dbConfig.database,
+      password: this.dbConfig.password,
+      port: this.dbConfig.port,
+      min: this.minSize,
+      max: this.maxSize,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000
     });
@@ -47,6 +54,11 @@ class DatabaseService {
    */
   async init() {
     try {
+      // Se o pool for null (por exemplo, após um close()), recriá-lo.
+      if (!this.pool) {
+        logger.info('Database pool is null, attempting to recreate.');
+        this._createPool();
+      }
       // Teste de conexão
       const client = await this.pool.connect();
       client.release();
@@ -54,6 +66,11 @@ class DatabaseService {
       return true;
     } catch (error) {
       logger.error(`Failed to initialize database pool: ${error.message}`);
+      // Se a recriação falhar, this.pool pode ainda ser o pool problemático ou null.
+      // Definir como null para garantir que na próxima tentativa de init ele tente recriar.
+      if (this.pool && error.message.includes('connect')) { // Se o erro foi ao conectar
+          await this.close(); // Tenta fechar e anular o pool problemático
+      }
       return false;
     }
   }

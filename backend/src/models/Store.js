@@ -28,8 +28,7 @@ const defaultStores = [
   new Store('zoro', 'Zoro', 'http://api.zoro.com', 'Inativo', 4),
   new Store('vitacost', 'Vitacost', 'http://167.114.223.83:3005/vc', 'Inativo', 4),
   new Store('bestbuy', 'Best Buy', 'http://167.114.223.83:3005/bb/api', 'Inativo', 4),
-  new Store('webstaurantstore', 'Webstaurantstore', 'http://167.114.223.83:3005/wr/api', 'Inativo', 4),
-  new Store('whitecap', 'White Cap', 'http://167.114.223.83:3005/wc/api', 'Inativo', 4)
+  new Store('webstaurantstore', 'Webstaurantstore', 'http://167.114.223.83:3005/wr/api', 'Inativo', 4)
 ];
 
 module.exports = {

@@ -1,0 +1,270 @@
+{
+  "timestamp": "2025-06-11T22:55:14.397Z",
+  "apiName": "Best Buy",
+  "baseUrl": "http://167.114.223.83:3005/bb/api",
+  "testConfiguration": {
+    "endpoints": 30,
+    "timeout": 10000,
+    "headers": {
+      "User-Agent": "CapacityTest/1.0",
+      "Accept": "application/json"
+    },
+    "sampleEndpoints": [
+      "1584442",
+      "1802033",
+      "1827049",
+      "1852103",
+      "1954062",
+      "1954071",
+      "2002019",
+      "2037002",
+      "2166035",
+      "2882668"
+    ]
+  },
+  "recommendations": {
+    "idealRPS": 20,
+    "conservativeRPS": 20,
+    "recommendedPattern": "burst"
+  },
+  "results": [
+    {
+      "apiName": "Best Buy",
+      "rps": 1,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 899.9442304666663,
+      "minResponseTime": 354.8791670000064,
+      "maxResponseTime": 3588.995749999998,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 2,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 601.8514707999985,
+      "minResponseTime": 311.37191699999676,
+      "maxResponseTime": 1326.8994579999999,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 3,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 744.9936056333332,
+      "minResponseTime": 322.2760410000046,
+      "maxResponseTime": 2132.0773749999935,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 4,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 731.6843805999995,
+      "minResponseTime": 332.52179199999955,
+      "maxResponseTime": 1492.1467499999999,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 5,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 535.2666153666675,
+      "minResponseTime": 329.15958300000057,
+      "maxResponseTime": 908.5194999999949,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 6,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 729.8091125000007,
+      "minResponseTime": 355.09687499998836,
+      "maxResponseTime": 2131.9904579999857,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 7,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 698.0978307000012,
+      "minResponseTime": 310.46012499998324,
+      "maxResponseTime": 2513.4611670000013,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 8,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 719.290633233331,
+      "minResponseTime": 417.19095899999957,
+      "maxResponseTime": 1899.7088750000112,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 10,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 808.0478916666635,
+      "minResponseTime": 411.5551249999844,
+      "maxResponseTime": 1708.3945839999942,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 12,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 718.7114334333329,
+      "minResponseTime": 476.3304160000116,
+      "maxResponseTime": 1500.8570419999887,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 15,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 939.0150221666631,
+      "minResponseTime": 551.3836249999877,
+      "maxResponseTime": 1675.7177500000107,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 20,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 782.1263167333352,
+      "minResponseTime": 453.97508299999754,
+      "maxResponseTime": 1225.5664589999942,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 20,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 646.2836653333342,
+      "minResponseTime": 375.77674999999,
+      "maxResponseTime": 1206.6927079999878,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Best Buy",
+      "rps": 20,
+      "pattern": "distributed",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 515.5099665333352,
+      "minResponseTime": 313.283334000007,
+      "maxResponseTime": 1320.1345410000067,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    }
+  ]
+}

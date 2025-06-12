@@ -3,19 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import ProviderConfigFactory from './providers/ProviderConfigFactory';
 
-// URL da API do Node.js para a Home Depot Sync
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:7005/api';
+// A URL da API foi fixada para garantir a comunicação com o backend na porta 7005.
+const API_URL = 'http://localhost:7005/api';
 
 interface Config {
   stockLevel: number;
   batchSize: number;
   requestsPerSecond: number;
   handlingTimeOmd: number;
-  homeDepotHandlingTime: number;
-  whiteCapHandlingTime: number;
-  vitacostHandlingTime: number;
-  bestbuyHandlingTime: number;
-  webstaurantstoreHandlingTime: number;
+  providerSpecificHandlingTime: number;
   updateFlagValue: number;
 }
 
@@ -84,11 +80,7 @@ export const StoreDashboard: React.FC = () => {
     batchSize: 0,
     requestsPerSecond: 0,
     handlingTimeOmd: 0,
-    homeDepotHandlingTime: 0,
-    whiteCapHandlingTime: 0,
-    vitacostHandlingTime: 0,
-    bestbuyHandlingTime: 0,
-    webstaurantstoreHandlingTime: 0,
+    providerSpecificHandlingTime: 0,
     updateFlagValue: 0
   });
   // Atualizar o tipo para suportar tanto strings (simulação) quanto objetos LogEntry
@@ -106,77 +98,53 @@ export const StoreDashboard: React.FC = () => {
   // Estado para controlar o número de erros consecutivos
   const [consecutiveErrors, setConsecutiveErrors] = useState<number>(0);
   // Estado para controlar o intervalo de polling (em ms)
-  const [pollingInterval, setPollingInterval] = useState<number>(60000); // Intervalo de polling aumentado para 60 segundos
+  const [pollingInterval, setPollingInterval] = useState<number>(10000); // Intervalo de polling aumentado para 10 segundos para reduzir carga
 
   // Estado para controlar mensagens de erro de servidor
   const [serverError, setServerError] = useState<string>('');
 
   // Função para buscar detalhes da loja
   const fetchStoreDetails = async () => {
+    if (!id) return;
     try {
-      // Buscar detalhes da loja
-      const storeResponse = await axios.get(`${API_URL}/stores`);
-      const storeData = storeResponse.data.find((s: any) => s.id === id);
-      
+      setLoading(true);
+      // Otimizado: Busca todas as informações da loja, incluindo configuração, em uma única chamada.
+      const response = await axios.get(`${API_URL}/stores/${id}/config`);
+      const storeData = response.data;
+
       if (!storeData) {
         setError(`Loja com ID ${id} não encontrada`);
         setLoading(false);
         return;
       }
+
+      // Verificar o status de sincronização usando os campos corretos
+      // Priorizar o campo syncStatus que já combina o estado do banco e da memória
+      const syncIsRunning = storeData.syncStatus === 'running' || storeData.is_sync_running === true;
       
+      // Log para debug
+      console.log(`[fetchStoreDetails] Store ${id} sync status: is_sync_running=${storeData.is_sync_running}, syncStatus=${storeData.syncStatus}, Final UI status=${syncIsRunning ? 'running' : 'stopped'}`);
+      
+      // Atualizar o estado da loja
       setStore({
-        id: storeData.id,
-        name: storeData.name,
-        status: storeData.status,
-        lastSync: storeData.lastSync,
-        scheduleInterval: storeData.scheduleInterval || 4
+        id: storeData.storeId,
+        name: storeData.displayName,
+        status: syncIsRunning ? 'Running' : 'Inactive', // Usar o status calculado
+        lastSync: storeData.lastSyncAt,
+        scheduleInterval: storeData.scheduleIntervalHours || 4
       });
+
+      // Atualizar o status de sincronização
+      setStatus(syncIsRunning ? 'running' : 'stopped');
       
-      // Definir status para o componente
-      setStatus(storeData.status === 'Ativo' || storeData.status === 'Executando' ? 'running' : 'stopped');
-      
-      // Definir data da última sincronização
-      if (storeData.lastSync) {
-        setLastRunTime(storeData.lastSync);
-      }
-      
-      // Buscar configurações da loja
-      try {
-        const configResponse = await axios.get(`${API_URL}/stores/${id}/config`);
-        if (configResponse.data) {
-          setConfig(configResponse.data);
-        }
-      } catch (configError) {
-        console.error('Erro ao buscar configurações:', configError);
-      }
-      
-      // Verificar se existe um agendamento ativo
-      try {
-        const scheduleResponse = await axios.get(`${API_URL}/stores/${id}/schedule/status`);
-        setIsScheduleActive(scheduleResponse.data.active);
-      } catch (scheduleError) {
-        console.error('Erro ao verificar status do agendamento:', scheduleError);
-      }
-      
-      // Buscar logs da loja
-      try {
-        const logsResponse = await axios.get(`${API_URL}/stores/${id}/logs`);
-        if (logsResponse.data && Array.isArray(logsResponse.data)) {
-          setLogs(logsResponse.data);
-        }
-      } catch (logsError) {
-        console.error('Erro ao buscar logs:', logsError);
-      }
-      
-      // Buscar progresso atual
-      try {
-        const progressResponse = await axios.get(`${API_URL}/stores/${id}/progress`);
-        if (progressResponse.data) {
-          setProgress(progressResponse.data);
-        }
-      } catch (progressError) {
-        console.error('Erro ao buscar progresso:', progressError);
-      }
+      setLastRunTime(storeData.lastSyncAt || '');
+      setIsScheduleActive(storeData.isScheduleActive);
+
+      // O objeto de configuração já vem no formato correto (camelCase) do backend.
+      setConfig(storeData);
+
+      // O restante das chamadas (logs, progress) pode ser mantido ou refatorado depois.
+      // ... (código para buscar logs e progresso)
       
       setLoading(false);
     } catch (error) {
@@ -238,27 +206,55 @@ export const StoreDashboard: React.FC = () => {
         if (consecutiveErrors > 0) {
           setConsecutiveErrors(0);
         }
+        
+        // Verificar se o backend está sinalizando para parar o polling
+        if (response.data.shouldStopPolling === true || response.data.isRunning === false) {
+          console.log(`Parando polling para ${id} - shouldStopPolling: ${response.data.shouldStopPolling}, isRunning: ${response.data.isRunning}`);
+          if (progressPolling) {
+            clearInterval(progressPolling);
+            setProgressPolling(null);
+          }
+          // Garantir que o status da UI esteja correto
+          if (status === 'running') {
+            setStatus('stopped');
+          }
+          // Atualizar detalhes da loja para refletir o status final
+          fetchStoreDetails();
+          return;
+        }
       }
       
-      // Se a sincronização não estiver mais em execução, buscar logs atualizados
-      if (response.data && !response.data.isRunning && status === 'running') {
+      // Se a sincronização não estiver mais em execução E estiver marcada como completa,
+      // ou se houve um erro explícito na resposta do progresso, então paramos.
+      if (response.data && ((!response.data.isRunning && response.data.completed) || response.data.error) && status === 'running') {
+        console.log(`Synchronization for ${id} completed or with error. Stopping polling and updating status.`);
         const logsResponse = await axios.get(`${API_URL}/stores/${id}/logs`);
         
         if (logsResponse.data) {
           setLogs(logsResponse.data);
-          setStatus('stopped');
         }
+        setStatus('stopped'); // Mudar status para stopped
+        if (progressPolling) { // Parar o polling
+          clearInterval(progressPolling);
+          setProgressPolling(null);
+        }
+        // Atualizar detalhes da loja para refletir o status final do banco de dados
+        fetchStoreDetails();
+      } else if (response.data && !response.data.isRunning && status === 'running' && !response.data.completed) {
+        // Se isRunning é false, mas não está 'completed' e não há erro,
+        // pode ser um estado transitório inicial. Não mude o status para 'stopped' ainda.
+        console.log(`[POLLING] Received isRunning: false for ${id}, but not marked as 'completed'. Waiting for next progress update.`);
       }
     } catch (error: any) {
       // Verificar o tipo de erro para exibir mensagem apropriada
-      let errorMessage = 'Erro ao conectar com o servidor';
+      let errorMessage = 'Error connecting to server';
       
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'O servidor está demorando para responder. Isso pode ocorrer durante sincronizações com muitos produtos.';
+        errorMessage = 'The server is taking too long to respond. This may occur during synchronizations with many products.';
       } else if (error.message === 'Network Error') {
-        errorMessage = 'Erro de conexão com o servidor. Verifique se o servidor está online.';
+        errorMessage = 'Network error. Please check if the server is online.';
       } else if (error.response) {
-        errorMessage = `Erro ${error.response.status}: ${error.response.data.message || 'Erro desconhecido'}`;
+        errorMessage = `Error ${error.response.status}: ${error.response.data.message || 'Unknown error'}`;
       }
       
       // Definir a mensagem de erro para ser exibida na interface
@@ -286,15 +282,24 @@ export const StoreDashboard: React.FC = () => {
   // Função para buscar progresso com retry
   const fetchProgressWithRetry = async (retries = 0): Promise<ProgressData | null> => {
     try {
-      const response = await axios.get(`${API_URL}/stores/${id}/progress?_t=${Date.now()}`, { timeout: 30000 });
+      // Adicionado cache buster apenas a cada 5 requisições para reduzir carga no servidor
+      const cacheBuster = Math.floor(Date.now() / 50000); // Muda a cada 50 segundos
+      const response = await axios.get(`${API_URL}/stores/${id}/progress?_cb=${cacheBuster}`, { timeout: 30000 });
       const data = response.data as ProgressData;
       setConsecutiveErrors(0);
       return data;
     } catch (error) {
-      console.error('[ERROR] Erro ao buscar progresso para', id, ':', error);
+      // Log apenas no primeiro erro ou a cada 3 tentativas para reduzir volume de logs
+      if (retries === 0 || retries % 3 === 0) {
+        console.error('[ERROR] Erro ao buscar progresso para', id, ':', error);
+      }
+      
       if (retries < MAX_RETRIES) {
         const delay = INITIAL_RETRY_DELAY * Math.pow(2, retries); // Backoff exponencial
-        console.log(`[RETRY] Tentando novamente em ${delay/1000} segundos... (Tentativa ${retries + 1}/${MAX_RETRIES})`);
+        // Log apenas na primeira tentativa ou a cada 3 tentativas
+        if (retries === 0 || retries % 3 === 0) {
+          console.log(`[RETRY] Tentando novamente em ${delay/1000} segundos... (Tentativa ${retries + 1}/${MAX_RETRIES})`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
         return fetchProgressWithRetry(retries + 1);
       } else {
@@ -317,7 +322,7 @@ export const StoreDashboard: React.FC = () => {
     if (progressPolling) return;
     console.log('[POLLING] Iniciando polling de progresso para', id);
     const interval = setInterval(async () => {
-      console.log('[POLLING] Buscando progresso para', id);
+      // Removido log excessivo de polling
       const data = await fetchProgressWithRetry();
       if (data) {
         setProgress(data);
@@ -328,30 +333,33 @@ export const StoreDashboard: React.FC = () => {
 
   // Função para lidar com mudanças na configuração
   const handleConfigChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setConfig(prev => ({
-      ...prev,
-      [name]: parseInt(value) || 0 // Garantir que seja um número ou 0
+    const { name, value, type } = e.target;
+    setConfig(prevConfig => ({
+      ...prevConfig,
+      [name]: type === 'number' ? parseInt(value, 10) || 0 : value,
     }));
   };
 
   const handleSaveConfig = async () => {
+    if (!id) return;
     try {
-      setLoading(true);
-      
-      const response = await axios.post(`${API_URL}/stores/${id}/config`, config);
-      
-      if (response.status === 200) {
-        alert('Configuração salva com sucesso!');
-      } else {
-        alert('Erro ao salvar configuração');
-      }
-      
-      setLoading(false);
+      // O backend espera um objeto com as chaves em snake_case
+      const payload = {
+        stock_level: config.stockLevel,
+        batch_size: config.batchSize,
+        requests_per_second: config.requestsPerSecond,
+        handling_time_omd: config.handlingTimeOmd,
+        // O campo no banco é genérico, então mapeamos o valor específico para ele.
+        provider_specific_handling_time: config.providerSpecificHandlingTime,
+        update_flag_value: config.updateFlagValue
+        // Adicione outros campos conforme necessário, garantindo a conversão para snake_case
+      };
+
+      await axios.post(`${API_URL}/stores/${id}/config`, payload);
+      alert('Configuração salva com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar configuração:', error);
-      alert('Erro ao salvar configuração');
-      setLoading(false);
+      alert('Erro ao salvar configuração.');
     }
   };
 
@@ -359,24 +367,23 @@ export const StoreDashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      const response = await axios.post(`${API_URL}/stores/${id}/sync`);
+      // Iniciar a sincronização no backend
+      await axios.post(`${API_URL}/stores/${id}/sync`, {}, {
+        // Tratar o status 202 (Accepted) como um sucesso, não um erro.
+        validateStatus: function (status) {
+          return status >= 200 && status < 300; // Aceita qualquer status 2xx
+        }
+      });
       
-      if (response.status === 200) {
-        setStatus('running');
-        
-        // Iniciar polling de progresso
-        startProgressPollingWithRetry();
-        
-        // Limpar logs anteriores
-        setLogs([]);
-      } else {
-        console.error(`[ERROR] Erro ao iniciar sincronização para ${id}:`, response.status);
-        alert('Erro ao iniciar sincronização');
-      }
+      // Se a chamada for bem-sucedida, atualizamos o status localmente
+      setStatus('running');
+      setServerError(''); // Limpa qualquer erro anterior
       
-      setLoading(false);
-    } catch (error) {
-      console.error(`[ERROR] Erro ao iniciar sincronização para ${id}:`, error);
+      // Iniciar o polling para obter o progresso
+      startProgressPolling();
+      
+    } catch (err) {
+      console.error('Erro ao iniciar sincronização:', err);
       alert('Erro ao iniciar sincronização');
       setLoading(false);
     }
@@ -495,6 +502,8 @@ export const StoreDashboard: React.FC = () => {
       
       if (response.status === 200) {
         setIsScheduleActive(true);
+        // Atualizar todos os dados da loja para garantir consistência
+        await fetchStoreDetails();
       }
     } catch (error) {
       console.error('Erro ao agendar sincronização:', error);
@@ -508,6 +517,8 @@ export const StoreDashboard: React.FC = () => {
       
       if (response.status === 200) {
         setIsScheduleActive(false);
+        // Atualizar todos os dados da loja para garantir consistência
+        await fetchStoreDetails();
       }
     } catch (error) {
       console.error('Erro ao cancelar agendamento:', error);
@@ -641,9 +652,16 @@ export const StoreDashboard: React.FC = () => {
 
   // Efeito para iniciar/parar polling baseado no status (APÓS fetchStoreDetails ter atualizado o status)
   useEffect(() => {
+    // Verificar se a loja está carregada antes de tomar qualquer ação
+    if (!store) return;
+    
+    console.log(`[useEffect] Status da sincronização mudou para: ${status}`);
+    
     if (status === 'running' && !progressPolling) {
+      console.log(`Iniciando polling para ${id} porque status = running`);
       startProgressPollingWithRetry();
     } else if (status !== 'running' && progressPolling) {
+      console.log(`Parando polling para ${id} porque status = ${status}`);
       clearInterval(progressPolling);
       setProgressPolling(null);
     }

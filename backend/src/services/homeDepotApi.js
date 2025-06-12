@@ -10,22 +10,11 @@ const retry = require('async-retry');
 const logger = require('../config/logging')();
 const HomeDepotCartApi = require('./homeDepotCartApi');
 require('dotenv').config();
+const API_CONFIG = require('../config/constants').API_CONFIG;
 
-// Carrega variáveis de ambiente - Usando preferencialmente as variáveis específicas da loja
-const HOMEDEPOT_STOCK_LEVEL = process.env.HOMEDEPOT_STOCK_LEVEL ? parseInt(process.env.HOMEDEPOT_STOCK_LEVEL, 10) : 7;
-const STOCK_LEVEL = HOMEDEPOT_STOCK_LEVEL; // Para compatibilidade com o código existente
-
-// Log para mostrar qual valor está sendo usado
-console.log(`Usando valor de estoque específico Home Depot (HOMEDEPOT_STOCK_LEVEL): ${HOMEDEPOT_STOCK_LEVEL}`);
-
-// Preferir as variáveis específicas da loja 
-const HOMEDEPOT_HANDLING_TIME_OMD = process.env.HOMEDEPOT_HANDLING_TIME_OMD 
-  ? parseInt(process.env.HOMEDEPOT_HANDLING_TIME_OMD, 10) 
-  : (process.env.LEAD_TIME_OMD ? parseInt(process.env.LEAD_TIME_OMD, 10) : 2);
-
-const LEAD_TIME_OMD = HOMEDEPOT_HANDLING_TIME_OMD; // Para compatibilidade com o código existente
-
-console.log(`Usando tempo de manuseio OMD específico Home Depot (HOMEDEPOT_HANDLING_TIME_OMD): ${HOMEDEPOT_HANDLING_TIME_OMD}`);
+// Obter configurações específicas do Home Depot do .env, com fallback para genéricos
+const HOMEDEPOT_STOCK_LEVEL = process.env.HOMEDEPOT_STOCK_LEVEL || process.env.STOCK_LEVEL;
+const HOMEDEPOT_HANDLING_TIME_OMD = process.env.HOMEDEPOT_HANDLING_TIME_OMD || process.env.LEAD_TIME_OMD;
 
 // Outras variáveis de ambiente
 const HOMEDEPOT_REQUESTS_PER_SECOND = process.env.HOMEDEPOT_REQUESTS_PER_SECOND 
@@ -303,7 +292,7 @@ class HomeDepotApiService {
       brand: apiData.brand || '',
       min_delivery_date: apiData.minDeliveryDate || null,
       max_delivery_date: apiData.maxDeliveryDate || null,
-      lead_time: LEAD_TIME_OMD,
+      lead_time: HOMEDEPOT_HANDLING_TIME_OMD,
       lead_time_2: 0,
       total_price: price + this.safeParseFloat(apiData.shippingCost),
       last_update: new Date().toISOString()

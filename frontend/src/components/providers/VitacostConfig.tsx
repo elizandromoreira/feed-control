@@ -6,7 +6,7 @@ interface VitacostConfigProps {
     batchSize: number;
     requestsPerSecond: number;
     handlingTimeOmd: number;
-    vitacostHandlingTime: number;
+    providerSpecificHandlingTime: number;
     updateFlagValue: number;
   };
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -26,7 +26,7 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
           id="stockLevel"
           type="number"
           name="stockLevel"
-          value={config.stockLevel}
+          value={config.stockLevel || ''}
           onChange={onChange}
           className="input"
           aria-label="Nível de estoque para Vitacost"
@@ -44,7 +44,7 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
           id="handlingTimeOmd"
           type="number"
           name="handlingTimeOmd"
-          value={config.handlingTimeOmd}
+          value={config.handlingTimeOmd || ''}
           onChange={onChange}
           className="input"
           aria-label="Tempo de manuseio da OMD em dias"
@@ -61,8 +61,8 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
         <input
           id="vitacostHandlingTime"
           type="number"
-          name="vitacostHandlingTime"
-          value={config.vitacostHandlingTime}
+          name="providerSpecificHandlingTime"
+          value={config.providerSpecificHandlingTime || ''}
           onChange={onChange}
           className="input"
           aria-label="Tempo de manuseio da Vitacost em dias"
@@ -80,7 +80,7 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
           id="batchSize"
           type="number"
           name="batchSize"
-          value={config.batchSize}
+          value={config.batchSize || ''}
           onChange={onChange}
           className="input"
           aria-label="Tamanho do lote"
@@ -98,7 +98,7 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
           id="requestsPerSecond"
           type="number"
           name="requestsPerSecond"
-          value={config.requestsPerSecond}
+          value={config.requestsPerSecond || ''}
           onChange={onChange}
           className="input"
           aria-label="Requisições por segundo"
@@ -116,7 +116,7 @@ const VitacostConfig: React.FC<VitacostConfigProps> = ({ config, onChange }) => 
           id="updateFlagValue"
           type="number"
           name="updateFlagValue"
-          value={config.updateFlagValue}
+          value={config.updateFlagValue || ''}
           onChange={onChange}
           className="input"
           aria-label="Código de atualização Vitacost"
