@@ -43,12 +43,10 @@ class WebstaurantstoreProvider extends BaseProvider {
     
     this.dbInitialized = false;
     
-    // Array to track problematic products for batch update
-    this.problematicProducts = [];
-    
-    // Use Sets to track unique stock counts
+    // Initialize tracking Sets and arrays
     this.inStockSet = new Set();
     this.outOfStockSet = new Set();
+    this.problematicProducts = [];
     
     // Counters for statistics
     this.retryCount = 0;
@@ -294,12 +292,16 @@ class WebstaurantstoreProvider extends BaseProvider {
       }
       
       // Prepare progress tracking
-      let progress = {
+      const progress = {
         totalProducts: products.length,
         processedProducts: 0,
+        successCount: 0,
+        failCount: 0,
         updatedProducts: 0,
         errorCount: 0,
-        currentSku: null
+        startTime: startTime,
+        isRunning: true,
+        phase: 1
       };
       
       // Set real request rate limit if provided
@@ -402,8 +404,6 @@ class WebstaurantstoreProvider extends BaseProvider {
               productData.availability
             ]);
             
-            // Log update
-            logger.info(`Updated product ${product.sku2} in database`);
             progress.updatedProducts++;
             return 'updated';
           } else {
@@ -466,7 +466,7 @@ class WebstaurantstoreProvider extends BaseProvider {
                   product.sku2
                 ]);
                 
-                logger.store('webstaurantstore', 'info', `Product ${product.sku} marked as out of stock after API error`);
+                logger.store('webstaurantstore', 'info', `✅ Product ${product.sku} marked as out of stock after API error`);
                 this.outOfStockSet.add(product.sku2);
               }
               
@@ -508,11 +508,18 @@ class WebstaurantstoreProvider extends BaseProvider {
             // Update progress counters based on status
             progress.processedProducts++;
             if (status === 'updated') {
+              logger.store('webstaurantstore', 'info', `✅ Successfully updated product ${product.sku2}`);
               progress.updatedProducts++;
+              progress.successCount++;
+            } else if (status === 'no_changes') {
+              logger.store('webstaurantstore', 'info', `✅ Product ${product.sku2} - no changes needed`);
+              progress.successCount++;
             } else if (status === 'failed') {
+              progress.failCount++;
               progress.errorCount++;
             }
             
+            // Update progress callback
             if (updateProgress) {
               updateProgress(progress);
             }
@@ -572,6 +579,8 @@ class WebstaurantstoreProvider extends BaseProvider {
           outOfStockCount: this.outOfStockSet.size,
           totalProducts: progress.totalProducts,
           processedProducts: progress.processedProducts,
+          successCount: progress.successCount,
+          failCount: progress.failCount,
           updatedProducts: progress.updatedProducts,
           errorCount: progress.errorCount,
           retryCount: this.retryCount,
@@ -583,13 +592,13 @@ class WebstaurantstoreProvider extends BaseProvider {
       const endTime = Date.now();
       const elapsedTime = endTime - startTime;
       
-      logger.info(`Phase 1 completed in ${elapsedTime}ms`);
-      logger.info(`Processed ${progress.processedProducts} of ${progress.totalProducts} products`);
-      logger.info(`Updated ${progress.updatedProducts} products`);
-      logger.info(`In stock: ${this.inStockSet.size}, Out of stock: ${this.outOfStockSet.size}`);
-      logger.info(`Errors: ${progress.errorCount}, Retries: ${this.retryCount}`);
+      logger.store('webstaurantstore', 'info', `✅ Phase 1 completed in ${elapsedTime}ms`);
+      logger.store('webstaurantstore', 'info', `✅ Processed ${progress.processedProducts} of ${progress.totalProducts} products`);
+      logger.store('webstaurantstore', 'info', `✅ Updated ${progress.updatedProducts} products`);
+      logger.store('webstaurantstore', 'info', `✅ In stock: ${this.inStockSet.size}, Out of stock: ${this.outOfStockSet.size}`);
+      logger.store('webstaurantstore', 'info', `📊 Success: ${progress.successCount}, Failed: ${progress.failCount}`);
       if (this.problematicProducts.length > 0) {
-        logger.info(`Problematic products (marked): ${this.problematicProducts.length}`);
+        logger.store('webstaurantstore', 'warn', `⚠️ Problematic products (marked): ${this.problematicProducts.length}`);
       }
       
       return {
@@ -598,6 +607,8 @@ class WebstaurantstoreProvider extends BaseProvider {
         outOfStockCount: this.outOfStockSet.size,
         totalProducts: progress.totalProducts,
         processedProducts: progress.processedProducts,
+        successCount: progress.successCount,
+        failCount: progress.failCount,
         updatedProducts: progress.updatedProducts,
         errorCount: progress.errorCount,
         retryCount: this.retryCount,

@@ -78,6 +78,8 @@ rsync -avz --delete \
   --exclude 'node_modules/' \
   --exclude '*.log' \
   --exclude '*.csv' \
+  --exclude 'feeds/' \
+  --exclude 'logs/' \
   --exclude '.git/' \
   --exclude '.gitignore' \
   --exclude 'package-lock.json' \
