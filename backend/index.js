@@ -16,6 +16,7 @@ const { getStoreConfig, getAllStoreConfigs, updateStoreConfig } = require('./src
 const { syncStoreWithProvider, runStorePhase } = require('./src/sync/sync-service');
 const logsRouter = require('./src/routes/logs');
 const feedSearchRouter = require('./src/routes/feedSearch');
+const cleanupService = require('./src/services/cleanupService');
 const logger = configureLogging();
 logger.info("Iniciando a aplicação Feed Control.");
 
@@ -671,6 +672,137 @@ app.get('/api/stores/:storeId/schedule/status', async (req, res) => {
     }
 });
 
+// ========== CLEANUP SERVICE ENDPOINTS ==========
+
+app.get('/api/cleanup/status', (req, res) => {
+    try {
+        const status = cleanupService.getStatus();
+        res.json(status);
+    } catch (error) {
+        logger.error('Error getting cleanup status:', error.message);
+        res.status(500).json({ message: 'Error getting cleanup status' });
+    }
+});
+
+app.post('/api/cleanup/force', async (req, res) => {
+    try {
+        logger.info('🔄 Manual cleanup requested via API');
+        await cleanupService.forceCleanup();
+        const status = cleanupService.getStatus();
+        res.json({ message: 'Cleanup completed successfully', status });
+    } catch (error) {
+        logger.error('Error during manual cleanup:', error.message);
+        res.status(500).json({ message: 'Error during cleanup' });
+    }
+});
+
+app.post('/api/cleanup/start', (req, res) => {
+    try {
+        cleanupService.start();
+        const status = cleanupService.getStatus();
+        res.json({ message: 'Cleanup service started', status });
+    } catch (error) {
+        logger.error('Error starting cleanup service:', error.message);
+        res.status(500).json({ message: 'Error starting cleanup service' });
+    }
+});
+
+app.post('/api/cleanup/stop', (req, res) => {
+    try {
+        cleanupService.stop();
+        const status = cleanupService.getStatus();
+        res.json({ message: 'Cleanup service stopped', status });
+    } catch (error) {
+        logger.error('Error stopping cleanup service:', error.message);
+        res.status(500).json({ message: 'Error stopping cleanup service' });
+    }
+});
+
+app.get('/api/cleanup/files', async (req, res) => {
+    try {
+        const feedsPath = path.join(__dirname, 'feeds');
+        const logsPath = path.join(__dirname, 'logs');
+        const now = Date.now();
+        const maxAge = 72 * 60 * 60 * 1000; // 72 hours in milliseconds
+        
+        const processDirectory = async (dirPath, dirName) => {
+            const files = [];
+            try {
+                const fileNames = await fs.readdir(dirPath);
+                
+                for (const fileName of fileNames) {
+                    const filePath = path.join(dirPath, fileName);
+                    const stats = await fs.stat(filePath);
+                    
+                    if (!stats.isDirectory()) {
+                        const age = now - stats.mtime.getTime();
+                        const ageHours = Math.round(age / (60 * 60 * 1000));
+                        const ageString = ageHours < 24 ? `${ageHours}h` : `${Math.round(ageHours / 24)}d`;
+                        
+                        files.push({
+                            name: fileName,
+                            size: stats.size,
+                            sizeFormatted: formatBytes(stats.size),
+                            created: stats.mtime.toISOString(),
+                            age: age,
+                            ageHours: ageHours,
+                            ageFormatted: ageString,
+                            willBeDeleted: age > maxAge,
+                            directory: dirName
+                        });
+                    }
+                }
+                
+                // Sort by age descending (oldest first)
+                files.sort((a, b) => b.age - a.age);
+                
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    logger.error(`Error reading ${dirName} directory:`, error.message);
+                }
+            }
+            
+            return files;
+        };
+        
+        const formatBytes = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+        
+        const [feedsFiles, logsFiles] = await Promise.all([
+            processDirectory(feedsPath, 'feeds'),
+            processDirectory(logsPath, 'logs')
+        ]);
+        
+        const allFiles = [...feedsFiles, ...logsFiles];
+        const toDelete = allFiles.filter(f => f.willBeDeleted);
+        const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0);
+        const deleteSize = toDelete.reduce((sum, f) => sum + f.size, 0);
+        
+        res.json({
+            feeds: feedsFiles,
+            logs: logsFiles,
+            summary: {
+                totalFiles: allFiles.length,
+                totalSize: formatBytes(totalSize),
+                filesToDelete: toDelete.length,
+                sizeToDelete: formatBytes(deleteSize),
+                maxAgeHours: 72
+            }
+        });
+        
+    } catch (error) {
+        logger.error('Error listing cleanup files:', error.message);
+        res.status(500).json({ message: 'Error listing files' });
+    }
+});
+
+// ========== END CLEANUP SERVICE ENDPOINTS ==========
+
 // Variável para controlar a frequência de logs do endpoint /api/stores/:storeId/next-sync
 let lastNextSyncLogTime = {};
 const NEXT_SYNC_LOG_INTERVAL = 60000; // 60 segundos entre logs detalhados
@@ -904,6 +1036,10 @@ async function main() {
         // Restaurar agendamentos ativos do banco de dados
         logger.info('Inicializando agendamentos a partir do banco de dados...');
         initializeSchedulesFromDB();
+        
+        // Iniciar o serviço de limpeza
+        cleanupService.start();
+        logger.info('Serviço de limpeza iniciado.');
     });
 }
 

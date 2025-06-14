@@ -111,7 +111,7 @@ class FeedService {
     try {
       const query = `
         UPDATE amazon_feeds 
-        SET status = $1, updated_at = NOW()
+        SET status = $1
         WHERE feed_id = $2
         RETURNING *
       `;
@@ -217,7 +217,7 @@ class FeedService {
     try {
       const query = `
         UPDATE amazon_feeds 
-        SET feed_id = $1, updated_at = NOW()
+        SET feed_id = $1
         WHERE id = (
           SELECT id FROM amazon_feeds 
           WHERE store_id = $2 AND feed_id IS NULL 
