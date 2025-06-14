@@ -1022,16 +1022,14 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
                   // Salvar resultados do processamento na tabela amazon_feeds se disponível
                   if (resultsProcessed.success && resultsProcessed.reportJson) {
                     try {
-                      await feedService.saveFeed(
-                        resultsProcessed.reportJson,  // feedData - JSON do resultado
-                        'result',                     // feedType - tipo resultado
-                        feedId,                      // feedId - mesmo ID do feed original
-                        'amazon',                    // storeId - identificador da loja
-                        null                         // filePath - não há arquivo local para resultados
+                      await feedService.updateFeedWithResults(
+                        feedId,                      // feedId - ID do feed original
+                        resultsProcessed.reportJson, // resultData - JSON do resultado
+                        resultsProcessed.reportJson.summary || {} // summary - resumo do processamento
                       );
-                      logger.info(`Feed results saved to database for feedId: ${feedId}`);
+                      logger.info(`Feed results updated in database for feedId: ${feedId}`);
                     } catch (saveError) {
-                      logger.error(`Error saving feed results to database: ${saveError.message}`);
+                      logger.error(`Error updating feed results in database: ${saveError.message}`);
                     }
                   }
                   

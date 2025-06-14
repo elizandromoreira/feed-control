@@ -731,7 +731,8 @@ class VitacostProvider extends BaseProvider {
           lead_time_2 = $6,
           handling_time_amz = $7,
           atualizado = $8,
-          last_update = NOW()
+          last_update = NOW(),
+          sku_problem = false
         WHERE sku2 = $9 AND source = 'Vitacost'
       `;
       
@@ -750,9 +751,9 @@ class VitacostProvider extends BaseProvider {
       this.updateStats.updatedProducts++;
       return { status: 'updated', changes };
     } else {
-      // No changes, just update last_update timestamp
+      // No changes, just update last_update timestamp and mark as processed
       await this.dbService.executeWithRetry(
-        `UPDATE produtos SET last_update = NOW() WHERE sku2 = $1 AND source = 'Vitacost'`,
+        `UPDATE produtos SET last_update = NOW(), sku_problem = false WHERE sku2 = $1 AND source = 'Vitacost'`,
         [sku2]
       );
       return { status: 'no_changes' };

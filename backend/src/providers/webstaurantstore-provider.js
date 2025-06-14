@@ -388,7 +388,8 @@ class WebstaurantstoreProvider extends BaseProvider {
                 atualizado = $6, 
                 last_update = NOW(),
                 brand = $7,
-                availability = $9
+                availability = $9,
+                sku_problem = false
               WHERE sku2 = $8 AND source = 'Webstaurantstore'
             `;
             

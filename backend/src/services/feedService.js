@@ -234,6 +234,36 @@ class FeedService {
       throw error;
     }
   }
+
+  /**
+   * Update existing feed with processing results
+   * @param {string} feedId - Amazon feed ID
+   * @param {Object} resultData - Processing result data
+   * @param {Object} summary - Processing summary
+   * @returns {Promise<Object|null>} - Updated feed or null
+   */
+  async updateFeedWithResults(feedId, resultData, summary) {
+    try {
+      const query = `
+        UPDATE amazon_feeds 
+        SET summary = $1, status = 'completed'
+        WHERE feed_id = $2
+        RETURNING *
+      `;
+      
+      const result = await pool.query(query, [summary, feedId]);
+      if (result.rows[0]) {
+        logger.info(`Feed results updated for feedId: ${feedId}`);
+        return result.rows[0];
+      } else {
+        logger.warn(`No feed found to update with feedId: ${feedId}`);
+        return null;
+      }
+    } catch (error) {
+      logger.error(`Error updating feed with results: ${error.message}`, { error });
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

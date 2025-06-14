@@ -262,7 +262,8 @@ class HomeDepotProvider extends BaseProvider {
                         throw new Error('No data returned from API');
                     }
                     
-                    return result;
+                    // Processar os dados da API através do mapApiDataToProductData
+                    return await this.mapApiDataToProductData(result, sku);
                 },
                 {
                     retries: 2,
@@ -402,8 +403,8 @@ class HomeDepotProvider extends BaseProvider {
             stock,
             available,
             brand,
-            min_delivery_date: apiData.min_delivery_date || null,
-            max_delivery_date: apiData.max_delivery_date || null,
+            min_delivery_date: apiData.minDeliveryDate || null,
+            max_delivery_date: apiData.maxDeliveryDate || null,
             productNotFound: false,
             sku_problem: false // Garantir que sku_problem seja sempre boolean
         };
@@ -444,7 +445,7 @@ class HomeDepotProvider extends BaseProvider {
             }
             
             // Buscar dados atuais do banco
-            const currentQuery = 'SELECT supplier_price, quantity, availability, brand, lead_time, lead_time_2, freight_cost FROM produtos WHERE sku = $1';
+            const currentQuery = 'SELECT supplier_price, quantity, availability, brand, lead_time, lead_time_2, handling_time_amz, freight_cost FROM produtos WHERE sku = $1';
             const currentResult = await this.dbService.executeWithRetry(currentQuery, [product.sku]);
             
             if (currentResult.rows.length === 0) {
@@ -479,10 +480,11 @@ class HomeDepotProvider extends BaseProvider {
                 brand: productData.brand || '',
                 lead_time: this.handlingTimeOmd,
                 lead_time_2: homeDepotLeadTime,
+                handling_time_amz: handlingTimeAmz,
                 freight_cost: 0,
                 last_update: new Date().toISOString(),
-                atualizado: this.updateFlagValue
-                // Removido sku_problem daqui - produtos não encontrados são tratados acima
+                atualizado: this.updateFlagValue,
+                sku_problem: false
             };
             
             // Check for changes and count them
@@ -507,7 +509,7 @@ class HomeDepotProvider extends BaseProvider {
                     hasRealChange = oldFloat !== newFloat;
                     displayOldValue = `$${oldFloat}`;
                     displayNewValue = `$${newFloat}`;
-                } else if (key === 'quantity' || key === 'lead_time' || key === 'lead_time_2') {
+                } else if (key === 'quantity' || key === 'lead_time' || key === 'lead_time_2' || key === 'handling_time_amz') {
                     // Comparar valores inteiros
                     const oldInt = parseInt(oldValue) || 0;
                     const newInt = parseInt(newValue) || 0;
@@ -544,9 +546,10 @@ class HomeDepotProvider extends BaseProvider {
                 const updateQuery = `
                     UPDATE produtos 
                     SET supplier_price = $1, quantity = $2, availability = $3, brand = $4,
-                        lead_time = $5, lead_time_2 = $6, freight_cost = $7,
-                        last_update = $8, atualizado = $9
-                    WHERE sku = $10
+                        lead_time = $5, lead_time_2 = $6, handling_time_amz = $7,
+                        freight_cost = $8,
+                        last_update = $9, atualizado = $10, sku_problem = $11
+                    WHERE sku = $12
                 `;
                 
                 await this.dbService.executeWithRetry(updateQuery, [
@@ -556,9 +559,11 @@ class HomeDepotProvider extends BaseProvider {
                     newData.brand,
                     newData.lead_time,
                     newData.lead_time_2,
+                    newData.handling_time_amz,
                     newData.freight_cost,
                     newData.last_update,
                     newData.atualizado,
+                    newData.sku_problem,
                     product.sku
                 ]);
                 
@@ -567,9 +572,23 @@ class HomeDepotProvider extends BaseProvider {
                 
                 return { status: 'updated', changes: changes.length, details: changes };
             } else {
-                // No changes needed
+                // No changes needed - but mark as processed successfully
+                const updateQuery = `
+                    UPDATE produtos 
+                    SET last_update = $1, atualizado = $2, sku_problem = false, lead_time_2 = $4, handling_time_amz = $5
+                    WHERE sku = $3
+                `;
+                
+                await this.dbService.executeWithRetry(updateQuery, [
+                    new Date().toISOString(),
+                    this.updateFlagValue,
+                    product.sku,
+                    homeDepotLeadTime,
+                    handlingTimeAmz
+                ]);
+                
                 const statusIcon = correctedAvailability === 'inStock' ? '✅' : '⭕';
-                logger.store(this.storeName, 'debug', `${statusIcon} No changes for ${product.sku}`);
+                logger.store(this.storeName, 'debug', `${statusIcon} No changes for ${product.sku} - marked as processed`);
                 return { status: 'no_changes' };
             }
             

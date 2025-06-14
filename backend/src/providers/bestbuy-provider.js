@@ -487,7 +487,7 @@ class BestBuyProvider extends BaseProvider {
             UPDATE produtos 
             SET supplier_price = $1, freight_cost = $2, lead_time = $3, lead_time_2 = $4, 
                 quantity = $5, availability = $6, brand = $7, handling_time_amz = $8, 
-                last_update = $9, atualizado = $10
+                last_update = $9, atualizado = $10, sku_problem = false
             WHERE sku = $11`;
 
           const values = [
@@ -509,8 +509,15 @@ class BestBuyProvider extends BaseProvider {
           
           return { status: 'updated', changes: hasChanges };
         } else {
-          logger.debug(`${productData.sku} ⭕ No changes detected`);
-          return { status: 'no_update' };
+          // Mark as processed successfully even if no changes
+          const updateQuery = `
+            UPDATE produtos 
+            SET last_update = $1, atualizado = $2, sku_problem = false
+            WHERE sku = $3`;
+          
+          await this.dbService.executeWithRetry(updateQuery, [new Date(), newData.atualizado, productData.sku]);
+          logger.debug(`${productData.sku} ⭕ No changes detected - marked as processed`);
+          return { status: 'no_changes' };
         }
       }
     } catch (error) {
