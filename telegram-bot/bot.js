@@ -699,7 +699,8 @@ async function handleCheckAPIs(chatId, messageId) {
     let frontendStatus = '❌ Offline';
     
     try {
-      const backendResponse = await axios.get(process.env.BACKEND_URL, { timeout: 5000 });
+      // Check backend API by hitting the /api/stores endpoint
+      const backendResponse = await axios.get(`${process.env.BACKEND_URL}/api/stores`, { timeout: 5000 });
       if (backendResponse.status === 200) {
         backendStatus = '✅ Online';
       }

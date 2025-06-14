@@ -37,29 +37,28 @@ class SimpleQueue {
    * @private
    */
   _processNext() {
-    if (this.running >= this.concurrency || this.queue.length === 0) {
-      return;
+    // Processar múltiplas tarefas até atingir o limite de concorrência
+    while (this.running < this.concurrency && this.queue.length > 0) {
+      const item = this.queue.shift();
+      this.running++;
+
+      Promise.resolve()
+        .then(() => item.task())
+        .then(
+          result => {
+            this.running--;
+            item.resolve(result);
+            this._processNext();
+            this._checkIdle();
+          },
+          error => {
+            this.running--;
+            item.reject(error);
+            this._processNext();
+            this._checkIdle();
+          }
+        );
     }
-
-    const item = this.queue.shift();
-    this.running++;
-
-    Promise.resolve()
-      .then(() => item.task())
-      .then(
-        result => {
-          this.running--;
-          item.resolve(result);
-          this._processNext();
-          this._checkIdle();
-        },
-        error => {
-          this.running--;
-          item.reject(error);
-          this._processNext();
-          this._checkIdle();
-        }
-      );
   }
 
   /**
@@ -85,6 +84,24 @@ class SimpleQueue {
     return new Promise(resolve => {
       this.pendingComplete = resolve;
     });
+  }
+
+  /**
+   * Limpa todas as tarefas pendentes da fila
+   * Não afeta tarefas que já estão em execução
+   * @returns {number} - Número de tarefas removidas da fila
+   */
+  clear() {
+    const removedCount = this.queue.length;
+    
+    // Rejeitar todas as tarefas pendentes
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      item.reject(new Error('Queue cleared - task cancelled'));
+    }
+    
+    this._checkIdle();
+    return removedCount;
   }
 }
 

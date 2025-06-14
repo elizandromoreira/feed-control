@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import ProviderConfigFactory from './providers/ProviderConfigFactory';
+import { API_URL } from '../config/apiConfig';
 
-// A URL da API foi fixada para garantir a comunicação com o backend na porta 7005.
-const API_URL = 'http://localhost:7005/api';
+// A URL da API é importada do arquivo de configuração para funcionar tanto em desenvolvimento quanto em produção
 
 interface Config {
   stockLevel: number;
@@ -29,6 +29,36 @@ interface LogEntry {
   count: number;
   path: string;
   date: string;
+}
+
+// Nova interface para logs estruturados da API
+interface StructuredLog {
+  timestamp: string;
+  level: string;
+  message: string;
+  store?: string;
+  requestId?: string;
+  sku?: string;
+}
+
+// Interface para estatísticas de logs
+interface LogStats {
+  totalRequests: number;
+  totalErrors: number;
+  totalWarnings: number;
+  totalProductsUpdated: number;
+  lastHourRequests: number;
+  lastHourErrors: number;
+  errorRate: string;
+}
+
+// Interface para request monitor
+interface RequestMonitor {
+  requestId: string;
+  sku: string;
+  startTime: string;
+  duration: number;
+  isPending: boolean;
 }
 
 // Interface para informações de progresso
@@ -103,6 +133,13 @@ export const StoreDashboard: React.FC = () => {
   // Estado para controlar mensagens de erro de servidor
   const [serverError, setServerError] = useState<string>('');
 
+  // Novo estado para logs estruturados
+  const [structuredLogs, setStructuredLogs] = useState<StructuredLog[]>([]);
+  // Novo estado para estatísticas de logs
+  const [logStats, setLogStats] = useState<LogStats | null>(null);
+  // Novo estado para request monitor
+  const [requestMonitor, setRequestMonitor] = useState<RequestMonitor[]>([]);
+
   // Função para buscar detalhes da loja
   const fetchStoreDetails = async () => {
     if (!id) return;
@@ -143,8 +180,8 @@ export const StoreDashboard: React.FC = () => {
       // O objeto de configuração já vem no formato correto (camelCase) do backend.
       setConfig(storeData);
 
-      // O restante das chamadas (logs, progress) pode ser mantido ou refatorado depois.
-      // ... (código para buscar logs e progresso)
+      // Carregar logs e estatísticas
+      loadLogsData();
       
       setLoading(false);
     } catch (error) {
@@ -429,6 +466,7 @@ export const StoreDashboard: React.FC = () => {
       .finally(() => {
         setLoading(false);
         fetchStoreDetails(); // Atualizar detalhes da loja
+        loadLogsData(); // Carregar logs e estatísticas
       });
       
       // Não esperar pela resposta para liberar a interface
@@ -668,6 +706,61 @@ export const StoreDashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]); // Dependência no status para controlar o polling
 
+  // Função para buscar logs estruturados da API
+  const fetchStructuredLogs = useCallback(async () => {
+    try {
+      console.log('Fetching structured logs for store:', id);
+      const response = await axios.get(`${API_URL}/logs/recent/${id}`, {
+        params: { 
+          limit: 100,
+          level: 'info,error,warn'
+        }
+      });
+      console.log('Structured logs response:', response.data);
+      setStructuredLogs(response.data.logs || []);
+    } catch (error) {
+      console.error('Error fetching structured logs:', error);
+    }
+  }, [id]);
+
+  // Função para buscar estatísticas de logs
+  const fetchLogStats = useCallback(async () => {
+    try {
+      console.log('Fetching log stats for store:', id);
+      const response = await axios.get(`${API_URL}/logs/stats/${id}`);
+      console.log('Log stats response:', response.data);
+      setLogStats(response.data.stats || null);
+    } catch (error) {
+      console.error('Error fetching log stats:', error);
+    }
+  }, [id]);
+
+  // Função para buscar monitor de requests
+  const fetchRequestMonitor = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/logs/request-monitor`);
+      setRequestMonitor(response.data.pendingRequests || []);
+    } catch (error) {
+      console.error('Error fetching request monitor:', error);
+    }
+  }, []);
+
+  // Função para carregar todos os logs e estatísticas
+  const loadLogsData = useCallback(async () => {
+    console.log('loadLogsData called for store:', id);
+    await Promise.all([
+      fetchStructuredLogs(),
+      fetchLogStats(),
+      fetchRequestMonitor()
+    ]);
+  }, [fetchStructuredLogs, fetchLogStats, fetchRequestMonitor, id]);
+
+  useEffect(() => {
+    if (id) {
+      loadLogsData();
+    }
+  }, [id, loadLogsData]);
+
   if (loading && !store) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -859,8 +952,67 @@ export const StoreDashboard: React.FC = () => {
 
       <div className="card mt-8">
         <h2 className="text-2xl font-bold mb-6">Logs e Erros</h2>
+        
+        {/* Estatísticas */}
+        {logStats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-blue-700 mb-1">Total Requests</h3>
+              <p className="text-2xl font-bold text-blue-900">{logStats.totalRequests}</p>
+              <p className="text-xs text-blue-600 mt-1">Last hour: {logStats.lastHourRequests}</p>
+            </div>
+            <div className="bg-red-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-red-700 mb-1">Total Errors</h3>
+              <p className="text-2xl font-bold text-red-900">{logStats.totalErrors}</p>
+              <p className="text-xs text-red-600 mt-1">Error rate: {logStats.errorRate}</p>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-yellow-700 mb-1">Warnings</h3>
+              <p className="text-2xl font-bold text-yellow-900">{logStats.totalWarnings}</p>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-green-700 mb-1">Products Updated</h3>
+              <p className="text-2xl font-bold text-green-900">{logStats.totalProductsUpdated}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Monitor de Requests Pendentes */}
+        {requestMonitor.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3">Pending Requests</h3>
+            <div className="bg-yellow-50 rounded-lg p-4 max-h-32 overflow-y-auto">
+              {requestMonitor.map((req) => (
+                <div key={req.requestId} className="flex justify-between text-sm mb-1">
+                  <span className="font-mono">{req.requestId} - SKU: {req.sku}</span>
+                  <span className="text-yellow-700">{req.duration}ms</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Logs Estruturados */}
         <div className="bg-gray-100 rounded-lg p-4 h-64 overflow-y-auto">
-          {getFilteredLogs().length > 0 ? (
+          {structuredLogs.length > 0 ? (
+            structuredLogs.map((log, index) => (
+              <div
+                key={index}
+                className={`text-sm font-mono mb-2 last:mb-0 ${
+                  log.level === 'error' ? 'text-red-600' : 
+                  log.level === 'warn' ? 'text-yellow-600' : 
+                  log.message.includes('SUCCESS') ? 'text-green-600' :
+                  'text-gray-700'
+                }`}
+              >
+                <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                {log.requestId && <span className="text-blue-500 ml-2">[{log.requestId}]</span>}
+                {log.sku && <span className="text-purple-500 ml-2">[SKU: {log.sku}]</span>}
+                <span className="ml-2">{log.message}</span>
+              </div>
+            ))
+          ) : getFilteredLogs().length > 0 ? (
+            // Fallback para logs antigos
             getFilteredLogs().map((log, index) => (
               <div
                 key={index}
@@ -878,6 +1030,15 @@ export const StoreDashboard: React.FC = () => {
             <p className="text-gray-500 text-center">Nenhum log disponível</p>
           )}
         </div>
+        
+        {/* Botão para recarregar logs */}
+        <button
+          onClick={loadLogsData}
+          className="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded text-sm"
+        >
+          Refresh Logs
+        </button>
+        
         {serverError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
             <strong className="font-bold">Erro!</strong>

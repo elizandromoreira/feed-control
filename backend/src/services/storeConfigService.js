@@ -17,6 +17,21 @@ function toCamelCase(obj) {
 }
 
 /**
+ * Converte as chaves de um objeto de camelCase para snake_case.
+ * @param {Object} obj - O objeto a ser convertido.
+ * @returns {Object} O objeto com as chaves em snake_case.
+ */
+function toSnakeCase(obj) {
+    if (!obj) return null;
+    const newObj = {};
+    for (const key in obj) {
+        const newKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        newObj[newKey] = obj[key];
+    }
+    return newObj;
+}
+
+/**
  * Busca a configuração de uma única loja pelo ID.
  * @param {string} storeId - O ID da loja.
  * @returns {Promise<Object|null>} A configuração da loja ou null se não encontrada.
@@ -60,6 +75,9 @@ async function getAllStoreConfigs() {
 async function updateStoreConfig(storeId, configData) {
     const pool = new Pool(DB_CONFIG);
 
+    // Converte configData de camelCase para snake_case
+    const snakeCaseData = toSnakeCase(configData);
+
     // Lista de todas as colunas que podem ser atualizadas.
     const updatableColumns = [
         'stock_level', 'batch_size', 'requests_per_second', 'handling_time_omd',
@@ -75,9 +93,9 @@ async function updateStoreConfig(storeId, configData) {
     // Constrói a query dinamicamente, mas de forma segura
     updatableColumns.forEach(column => {
         // Verifica se a chave existe e não é undefined no payload recebido
-        if (configData[column] !== undefined) {
+        if (snakeCaseData[column] !== undefined) {
             fieldsToUpdate.push(`"${column}" = $${values.length + 1}`);
-            values.push(configData[column]);
+            values.push(snakeCaseData[column]);
         }
     });
 
@@ -105,7 +123,6 @@ async function updateStoreConfig(storeId, configData) {
         await pool.end();
     }
 }
-
 
 module.exports = {
     getStoreConfig,

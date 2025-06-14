@@ -1,0 +1,269 @@
+{
+  "timestamp": "2025-06-12T17:39:43.504Z",
+  "apiName": "Home Depot",
+  "baseUrl": "http://167.114.223.83:3005/hd/api",
+  "testConfiguration": {
+    "endpoints": 30,
+    "timeout": 15000,
+    "headers": {
+      "User-Agent": "CapacityTest/1.0"
+    },
+    "sampleEndpoints": [
+      "320118496",
+      "318214252",
+      "310740760",
+      "317741502",
+      "316245817",
+      "313916863",
+      "322680807",
+      "313872061",
+      "328424820",
+      "315086962"
+    ]
+  },
+  "recommendations": {
+    "idealRPS": 20,
+    "conservativeRPS": 20,
+    "recommendedPattern": "burst"
+  },
+  "results": [
+    {
+      "apiName": "Home Depot",
+      "rps": 1,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 967.2691957666665,
+      "minResponseTime": 563.356458000002,
+      "maxResponseTime": 4703.072250000001,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 2,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 889.2256374666664,
+      "minResponseTime": 543.1868749999994,
+      "maxResponseTime": 1596.0042919999978,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 3,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 961.584386033333,
+      "minResponseTime": 543.4235830000107,
+      "maxResponseTime": 1999.4526250000054,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 4,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1319.6744194999997,
+      "minResponseTime": 641.1235420000012,
+      "maxResponseTime": 7369.545125000004,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 5,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1046.2186639000013,
+      "minResponseTime": 584.7287910000014,
+      "maxResponseTime": 1913.083500000008,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 6,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1145.6779263666617,
+      "minResponseTime": 605.7411659999925,
+      "maxResponseTime": 1789.0157079999917,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 7,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1025.9419707999982,
+      "minResponseTime": 593.1915839999856,
+      "maxResponseTime": 1897.3858750000072,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 8,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1121.7015945,
+      "minResponseTime": 566.677416999999,
+      "maxResponseTime": 2179.8787079999747,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 10,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1272.8794236333295,
+      "minResponseTime": 609.8384999999835,
+      "maxResponseTime": 4602.140124999976,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 12,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1246.6776791666673,
+      "minResponseTime": 632.1737500000163,
+      "maxResponseTime": 2709.231208000012,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 15,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1897.1171347333332,
+      "minResponseTime": 633.5517079999845,
+      "maxResponseTime": 5805.280167000019,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 20,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1370.9741542666675,
+      "minResponseTime": 788.3729999999923,
+      "maxResponseTime": 4679.172833999997,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 20,
+      "pattern": "burst",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 1091.9005667999988,
+      "minResponseTime": 739.8042919999862,
+      "maxResponseTime": 1880.4748329999857,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    },
+    {
+      "apiName": "Home Depot",
+      "rps": 20,
+      "pattern": "distributed",
+      "totalRequests": 30,
+      "successCount": 30,
+      "failCount": 0,
+      "timeoutCount": 0,
+      "avgResponseTime": 898.226211166671,
+      "minResponseTime": 552.7794579999754,
+      "maxResponseTime": 1754.9637079999666,
+      "successRate": 100,
+      "errors": [],
+      "recommendations": [
+        "Excelente! Esta configuração é muito estável."
+      ]
+    }
+  ]
+}

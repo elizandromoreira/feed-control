@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { NextSyncCountdown } from './NextSyncCountdown';
+import { API_URL } from '../config/apiConfig';
 
-// A URL da API foi fixada para garantir a comunicação com o backend na porta 7005.
-const API_URL = 'http://localhost:7005/api';
+// A URL da API é importada do arquivo de configuração para funcionar tanto em desenvolvimento quanto em produção
 
 interface Store {
   id: string;
@@ -88,7 +88,18 @@ export const StoresList: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Sync Dashboard</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Sync Dashboard</h1>
+        <button
+          onClick={() => navigate('/search')}
+          className="btn btn-secondary flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Search Feeds
+        </button>
+      </div>
       
       {error && (
         <div className="bg-error bg-opacity-10 border border-error text-error px-4 py-3 rounded mb-6">

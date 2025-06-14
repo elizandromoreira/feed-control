@@ -9,6 +9,7 @@ const BaseProvider = require('./provider-interface');
 const DatabaseService = require('../services/database');
 const { DB_CONFIG } = require('../config/db');
 const logger = require('../config/logging')();
+const SimpleQueue = require('../utils/SimpleQueue');
 const axios = require('axios');
 
 class BestBuyProvider extends BaseProvider {
@@ -18,7 +19,7 @@ class BestBuyProvider extends BaseProvider {
     this.dbService = new DatabaseService(DB_CONFIG);
     
     // Configurações simples
-    this.stockLevel = config.stockLevel ?? 33;
+    this.stockLevel = config.stockLevel ?? 5; // Use value from config
     this.handlingTimeOmd = config.handlingTimeOmd ?? 1;
     this.providerSpecificHandlingTime = config.providerSpecificHandlingTime ?? 3;
     this.updateFlagValue = config.updateFlagValue ?? 4;
@@ -29,6 +30,24 @@ class BestBuyProvider extends BaseProvider {
     logger.info(`- Provider Handling Time: ${this.providerSpecificHandlingTime}`);
     
     this.dbInitialized = false;
+    
+    // State tracking
+    this.problematicProducts = [];
+    this.inStockSet = new Set();
+    this.outOfStockSet = new Set();
+    
+    // Request tracking
+    this.requestCounter = 0;
+    this.pendingRequests = new Map();
+    
+    // Statistics
+    this.updateStats = {
+        priceChanges: 0,
+        quantityChanges: 0,
+        availabilityChanges: 0,
+        brandChanges: 0,
+        handlingTimeChanges: 0
+    };
   }
 
   async init() {
@@ -55,49 +74,91 @@ class BestBuyProvider extends BaseProvider {
     return 'Best Buy';
   }
 
+  generateRequestId() {
+    return ++this.requestCounter;
+  }
+
+  trackRequest(requestId, sku, url) {
+    this.pendingRequests.set(requestId, {
+      sku,
+      url,
+      startTime: Date.now()
+    });
+  }
+
+  completeRequest(requestId, success = true) {
+    const requestInfo = this.pendingRequests.get(requestId);
+    if (requestInfo) {
+      const duration = Date.now() - requestInfo.startTime;
+      logger.info(`[REQ-${requestId}] Request completed for SKU ${requestInfo.sku} - Total duration: ${duration}ms, Success: ${success}`);
+      this.pendingRequests.delete(requestId);
+    }
+  }
+
+  checkPendingRequests() {
+    const now = Date.now();
+    const staleThreshold = 30000; // 30 segundos
+    
+    for (const [requestId, info] of this.pendingRequests) {
+      const age = now - info.startTime;
+      if (age > staleThreshold) {
+        logger.warn(`[REQUEST-MONITOR] REQ-${requestId}: SKU ${info.sku}, Age: ${age}ms, URL: ${info.url}`);
+      }
+    }
+  }
+
   /**
    * Busca dados de um produto na API - VERSÃO SIMPLES
    */
   async fetchProductData(sku) {
+    const requestId = this.generateRequestId();
+    const url = `${this.apiBaseUrl}/${sku}`;
+    const startTime = Date.now();
+    
     try {
-      const url = `${this.apiBaseUrl}/${sku}`;
+      this.trackRequest(requestId, sku, url);
+      logger.info(`[REQ-${requestId}] Starting request for SKU ${sku} at ${url}`);
       
       const response = await axios.get(url, {
         headers: { 'Accept': 'application/json', 'User-Agent': 'FeedControl/1.0' },
         timeout: 30000
       });
 
+      const duration = Date.now() - startTime;
+      logger.info(`[REQ-${requestId}] Response received for SKU ${sku} - Status: ${response.status}, Duration: ${duration}ms`);
+      
+      this.completeRequest(requestId, true);
+
       // Verificação da nova estrutura de resposta
       if (response.status === 200 && response.data) {
         const apiResponse = response.data;
         
-        // 🔍 LOG DETALHADO PARA DEBUG
         logger.info(`[${sku}] RAW API Response: ${JSON.stringify(apiResponse)}`);
-        
-        // Verificar o campo success
+
+        // Verificar se a API indica sucesso
         if (apiResponse.success === true && apiResponse.data) {
-          const apiData = apiResponse.data;
-          logger.info(`[${sku}] API Success - Availability: "${apiData.availability}", Price: ${apiData.price}`);
+          const productData = apiResponse.data;
           
-          // Transformação simples e direta
-          const isInStock = apiData.availability === "InStock";
-          
-          const transformedData = {
-            sku: sku,
-            price: apiData.price || 0,
-            brand: apiData.brand || '',
-            quantity: isInStock ? this.stockLevel : 0,
-            availability: isInStock ? 'inStock' : 'outOfStock',
+          // Transformar dados recebidos
+          const isInStock = productData.availability === 'InStock';
+          const finalAvailability = isInStock ? 'inStock' : 'outOfStock';
+          const finalQuantity = isInStock ? this.stockLevel : 0;
+
+          logger.info(`[${sku}] API Success - Availability: "${productData.availability}", Price: ${productData.price}`);
+          logger.info(`[${sku}] Transformed - isInStock: ${isInStock}, Final Availability: "${finalAvailability}", Final Price: ${productData.price}, Final Qty: ${finalQuantity}`);
+
+          return {
+            sku: productData.sku,
+            price: productData.price || 0,
+            brand: productData.brand || '',
+            quantity: finalQuantity,
+            availability: finalAvailability,
             handlingTime: this.handlingTimeOmd + this.providerSpecificHandlingTime
           };
-          
-          // 🔍 LOG DA TRANSFORMAÇÃO
-          logger.info(`[${sku}] Transformed - isInStock: ${isInStock}, Final Availability: "${transformedData.availability}", Final Price: ${transformedData.price}, Final Qty: ${transformedData.quantity}`);
-          
-          return transformedData;
-        } else {
-          // Se success é false ou não há dados, marcar como OutOfStock
-          logger.warn(`[${sku}] API returned success: false - Product not found or unavailable`);
+        } 
+        // Produto não encontrado (success = false)
+        else if (apiResponse.success === false) {
+          logger.warn(`[REQ-${requestId}] API FAILURE - SKU ${sku}: Product not found (success = false)`);
           return {
             sku: sku,
             price: 0,
@@ -107,21 +168,31 @@ class BestBuyProvider extends BaseProvider {
             handlingTime: this.handlingTimeOmd + this.providerSpecificHandlingTime
           };
         }
+        // Formato inesperado
+        else {
+          logger.error(`[REQ-${requestId}] INVALID FORMAT - SKU ${sku}: ${JSON.stringify(apiResponse)}`);
+          throw new Error(`Unexpected API response format for SKU ${sku}`);
+        }
       } else {
-        // Se a API não retornou status 200, marcar como OutOfStock
-        logger.warn(`[${sku}] Invalid API response status: ${response.status} - marking as OutOfStock`);
-        return {
-          sku: sku,
-          price: 0,
-          brand: '',
-          quantity: 0,
-          availability: 'outOfStock',
-          handlingTime: this.handlingTimeOmd + this.providerSpecificHandlingTime
-        };
+        throw new Error(`Invalid response status or data for SKU ${sku}`);
       }
+      
     } catch (error) {
-      // Em caso de erro, marcar como OutOfStock
-      logger.error(`[${sku}] API error: ${error.message} - marking as OutOfStock`);
+      const duration = Date.now() - startTime;
+      
+      if (error.response) {
+        logger.error(`[REQ-${requestId}] HTTP ERROR - SKU ${sku}: Status ${error.response.status}, Duration: ${duration}ms`);
+      } else if (error.code === 'ECONNABORTED') {
+        logger.error(`[REQ-${requestId}] TIMEOUT - SKU ${sku}: Request timed out after ${duration}ms`);
+      } else if (error.code) {
+        logger.error(`[REQ-${requestId}] NETWORK ERROR - SKU ${sku}: ${error.code} - ${error.message}, Duration: ${duration}ms`);
+      } else {
+        logger.error(`[REQ-${requestId}] UNKNOWN ERROR - SKU ${sku}: ${error.message}, Duration: ${duration}ms`);
+      }
+      
+      this.completeRequest(requestId, false);
+      
+      // Retorna produto como outOfStock em caso de erro
       return {
         sku: sku,
         price: 0,
@@ -298,161 +369,155 @@ class BestBuyProvider extends BaseProvider {
       const currentData = await this.dbService.fetchRowWithRetry(currentQuery, [product.sku]);
 
       if (!currentData) {
-        logger.warn(`[${product.sku}] Product not found in database`);
-        return { status: 'failed', message: 'Product not found' };
+        logger.warn(`Product ${productData.sku} not found in DB. Skipping update.`);
+        return { status: 'failed', message: 'Product not found in database' };
       }
 
-      // Verificar se há mudanças
-      const hasChanges = (
-        Number(currentData.supplier_price) !== productData.price ||
-        Number(currentData.quantity) !== productData.quantity ||
-        String(currentData.availability) !== productData.availability ||
-        String(currentData.brand || '') !== productData.brand ||
-        Number(currentData.lead_time) !== this.handlingTimeOmd ||
-        Number(currentData.lead_time_2) !== this.providerSpecificHandlingTime ||
-        Number(currentData.handling_time_amz) !== productData.handlingTime
-      );
-
-      if (!hasChanges) {
-        // Apenas atualizar last_update
-        const updateLastCheckQuery = `UPDATE produtos SET last_update = $1 WHERE sku = $2`;
-        await this.dbService.executeWithRetry(updateLastCheckQuery, [new Date(), product.sku]);
-        return { status: 'no_update' };
-      }
-
-      // 🔍 LOG DETALHADO DA ATUALIZAÇÃO
-      logger.info(`[${product.sku}] DB Update - Old: ${currentData.availability}/$${currentData.supplier_price}, New: ${productData.availability}/$${productData.price}`);
-
-      // Atualizar produto
-      const updateQuery = `
-        UPDATE produtos SET 
-          supplier_price=$1, quantity=$2, availability=$3, brand=$4,
-          lead_time=$5, lead_time_2=$6, handling_time_amz=$7,
-          last_update=$8, atualizado=$9
-        WHERE sku = $10`;
+      // Check if product was not found in API (success = false)
+      const isProductNotFound = productData.quantity === 0 && productData.availability === 'outOfStock' && productData.price === 0;
       
-      const updateResult = await this.dbService.executeWithRetry(updateQuery, [
-        productData.price,
-        productData.quantity,
-        productData.availability,
-        productData.brand,
-        this.handlingTimeOmd,
-        this.providerSpecificHandlingTime,
-        productData.handlingTime,
-        new Date(),
-        this.updateFlagValue,
-        product.sku
-      ]);
+      // Os valores já vem calculados corretamente do fetchProductDataWithRetry
+      // baseados na configuração da loja (this.stockLevel vem do config)
+      const quantity = productData.quantity;
+      const availability = productData.availability;
 
-      // 🔍 VERIFICAR SE A ATUALIZAÇÃO FOI APLICADA
-      if (updateResult.rowCount === 0) {
-        logger.error(`[${product.sku}] Database update failed - no rows affected`);
-        return { status: 'failed', message: 'No rows updated' };
+      if (availability === 'inStock') this.inStockSet.add(productData.sku);
+      else this.outOfStockSet.add(productData.sku);
+
+      // Use simple lead time calculation based on configuration
+      const bestBuyLeadTime = this.providerSpecificHandlingTime; // Provider Handling Time (3 dias)
+      
+      // Calculate handling time for Amazon
+      let handlingTimeAmz = this.handlingTimeOmd + bestBuyLeadTime;
+      if (handlingTimeAmz > 29) {
+        logger.warn(`Handling time for ${productData.sku} capped at 29 days (was ${handlingTimeAmz}).`);
+        handlingTimeAmz = 29;
       }
 
-      logger.info(`[${product.sku}] Updated: ${productData.availability}, Price: ${productData.price}, Qty: ${productData.quantity}`);
-      return { status: 'updated' };
+      const newData = {
+        supplier_price: productData.price || 0,
+        freight_cost: productData.shipping_cost || 0,
+        lead_time: this.handlingTimeOmd.toString(), // OMD handling time
+        lead_time_2: bestBuyLeadTime, // Provider specific handling time
+        quantity: quantity,
+        availability: availability,
+        brand: productData.brand || '',
+        handling_time_amz: handlingTimeAmz,
+        atualizado: this.updateFlagValue,
+        sku_problem: isProductNotFound
+      };
 
+      let hasChanges = false;
+      const changes = [];
+      
+      // Compare relevant fields and log detailed changes
+      const oldPrice = parseFloat(currentData.supplier_price) || 0;
+      const newPrice = parseFloat(newData.supplier_price) || 0;
+      if (oldPrice !== newPrice) {
+        changes.push(`  price: $${oldPrice} → $${newPrice}`);
+        hasChanges = true;
+        this.updateStats.priceChanges++;
+      }
+
+      const oldQuantity = parseInt(currentData.quantity) || 0;
+      const newQuantity = parseInt(newData.quantity) || 0;
+      if (oldQuantity !== newQuantity) {
+        changes.push(`  quantity: ${oldQuantity} → ${newQuantity}`);
+        hasChanges = true;
+        this.updateStats.quantityChanges++;
+      }
+
+      if (currentData.availability !== newData.availability) {
+        changes.push(`  availability: ${currentData.availability} → ${newData.availability}`);
+        hasChanges = true;
+        this.updateStats.availabilityChanges++;
+      }
+
+      const oldFreight = parseFloat(currentData.freight_cost) || 0;
+      const newFreight = parseFloat(newData.freight_cost) || 0;
+      if (oldFreight !== newFreight) {
+        changes.push(`  freight_cost: $${oldFreight} → $${newFreight}`);
+        hasChanges = true;
+      }
+
+      // Lead time - comparar valores numéricos
+      const oldLeadTime = parseInt(currentData.lead_time) || 0;
+      const newLeadTime = parseInt(newData.lead_time) || 0;
+      if (oldLeadTime !== newLeadTime) {
+        changes.push(`  lead_time: ${oldLeadTime} → ${newLeadTime}`);
+        hasChanges = true;
+      }
+
+      // Lead time 2 - comparar valores numéricos
+      const oldLeadTime2 = parseInt(currentData.lead_time_2) || 0;
+      const newLeadTime2 = parseInt(newData.lead_time_2) || 0;
+      if (oldLeadTime2 !== newLeadTime2) {
+        changes.push(`  lead_time_2: ${oldLeadTime2} → ${newLeadTime2}`);
+        hasChanges = true;
+      }
+
+      if (currentData.brand !== newData.brand) {
+        changes.push(`  brand: "${currentData.brand}" → "${newData.brand}"`);
+        hasChanges = true;
+        this.updateStats.brandChanges++;
+      }
+
+      // Handling time - comparar valores numéricos
+      const oldHandlingTime = parseInt(currentData.handling_time_amz) || 0;
+      const newHandlingTime = parseInt(newData.handling_time_amz) || 0;
+      if (oldHandlingTime !== newHandlingTime) {
+        changes.push(`  handling_time_amz: ${oldHandlingTime} → ${newHandlingTime}`);
+        hasChanges = true;
+        this.updateStats.handlingTimeChanges++;
+      }
+
+      if (hasChanges) {
+        logger.info(`Product ${productData.sku} updated with changes:`);
+        logger.info(changes.join('\n'));
+      }
+
+      if (isProductNotFound) {
+        logger.error(`❌ FAILED PRODUCT: ${product.sku} - Product not found in API`);
+        this.problematicProducts.push(product.sku);
+        // Removed individual DB update - will be done in batch
+        return { status: 'failed', message: 'Product not found' };
+      } else {
+        if (hasChanges) {
+          const updateQuery = `
+            UPDATE produtos 
+            SET supplier_price = $1, freight_cost = $2, lead_time = $3, lead_time_2 = $4, 
+                quantity = $5, availability = $6, brand = $7, handling_time_amz = $8, 
+                last_update = $9, atualizado = $10
+            WHERE sku = $11`;
+
+          const values = [
+            newData.supplier_price,
+            newData.freight_cost,
+            newData.lead_time,
+            newData.lead_time_2,
+            newData.quantity,
+            newData.availability,
+            newData.brand,
+            newData.handling_time_amz,
+            new Date(),
+            newData.atualizado,
+            productData.sku
+          ];
+
+          await this.dbService.executeWithRetry(updateQuery, values);
+          logger.info(`${productData.sku} ✅ Updated successfully - ${changes.length} changes`);
+          
+          return { status: 'updated', changes: hasChanges };
+        } else {
+          logger.debug(`${productData.sku} ⭕ No changes detected`);
+          return { status: 'no_update' };
+        }
+      }
     } catch (error) {
-      logger.error(`[${product.sku}] Update failed: ${error.message}`);
+      logger.error(`❌ FAILED PRODUCT: ${product.sku} - Error: ${error.message}`);
+      this.problematicProducts.push(product.sku);
       return { status: 'failed', message: error.message };
     }
-  }
-
-  /**
-   * Processa produtos em lotes com controle de concorrência simples
-   */
-  async processProductsBatch(products, maxConcurrent, checkCancellation) {
-    const results = [];
-    
-    // Processar em grupos de maxConcurrent
-    for (let i = 0; i < products.length; i += maxConcurrent) {
-      // ✅ VERIFICAR CANCELAMENTO ANTES DE CADA LOTE
-      if (checkCancellation && checkCancellation()) {
-        logger.info('Cancellation requested during batch processing, stopping...');
-        break;
-      }
-      
-      const batch = products.slice(i, i + maxConcurrent);
-      
-      logger.info(`Processing batch ${Math.floor(i/maxConcurrent) + 1}: ${batch.length} products`);
-      
-      // Processar lote em paralelo
-      const batchPromises = batch.map(product => this.updateProductInDb(product));
-      const batchResults = await Promise.all(batchPromises);
-      
-      results.push(...batchResults);
-      
-      // ✅ VERIFICAR CANCELAMENTO APÓS CADA LOTE
-      if (checkCancellation && checkCancellation()) {
-        logger.info('Cancellation requested after batch completion, stopping...');
-        break;
-      }
-      
-      // Pequena pausa entre lotes para não sobrecarregar a API
-      if (i + maxConcurrent < products.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-    
-    return results;
-  }
-
-  /**
-   * Processa produtos respeitando o batch_size do frontend
-   */
-  async processProductsBatchWithCorrectSize(products, batchSize, maxConcurrent, checkCancellation, progress, updateProgress) {
-    // Não retorna mais 'results', pois o progresso é atualizado aqui dentro.
-    
-    for (let i = 0; i < products.length; i += batchSize) {
-      if (checkCancellation && checkCancellation()) {
-        logger.info('Cancellation requested during batch processing, stopping...');
-        break;
-      }
-      
-      const batch = products.slice(i, i + batchSize);
-      const batchNumber = Math.floor(i / batchSize) + 1;
-      
-      logger.info(`Processing batch ${batchNumber}: ${batch.length} products (batch size: ${batchSize})`);
-      
-      const batchResults = await this.processProductsBatch(batch, maxConcurrent, checkCancellation);
-      
-      // ATUALIZAR PROGRESSO AQUI, APÓS CADA LOTE
-      batchResults.forEach(result => {
-        progress.processedProducts++;
-        if (result.status === 'updated') {
-          progress.updatedProducts++;
-          progress.successCount++;
-        } else if (result.status === 'no_update') {
-          progress.successCount++;
-        } else {
-          progress.failCount++;
-        }
-      });
-
-      if (updateProgress) {
-        const percentage = progress.totalProducts > 0 ? Math.round((progress.processedProducts / progress.totalProducts) * 100) : 0;
-        const progressPayload = {
-          ...progress,
-          percentage: Math.min(100, percentage),
-          isRunning: true,
-          completed: false,
-        };
-        logger.info(`[BB Provider] Updating progress after batch ${batchNumber}: Processed ${progress.processedProducts}/${progress.totalProducts}`);
-        updateProgress(progressPayload);
-      }
-      
-      if (checkCancellation && checkCancellation()) {
-        logger.info('Cancellation requested after batch completion, stopping...');
-        break;
-      }
-      
-      if (i + batchSize < products.length) {
-        logger.info(`Completed batch ${batchNumber}, pausing before next batch...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-    // Não precisa retornar nada, o objeto 'progress' é modificado por referência.
   }
 
   /**
@@ -464,6 +529,9 @@ class BestBuyProvider extends BaseProvider {
     const startTime = Date.now();
     await this.init();
     
+    // Iniciar monitoramento de requests
+    this.startRequestMonitoring();
+    
     try {
       // Buscar produtos
       const query = `SELECT sku, sku2 FROM produtos WHERE source = 'Best Buy' ORDER BY last_update ASC`;
@@ -471,11 +539,10 @@ class BestBuyProvider extends BaseProvider {
       
       logger.info(`Found ${products.length} Best Buy products to process`);
       
-      // 🔧 USAR BATCH_SIZE DO FRONTEND, NÃO requestsPerSecond
-      const effectiveBatchSize = batchSize || 100; // Default 100 se não especificado
-      const maxConcurrent = Math.min(requestsPerSecond || 5, 10); // Concorrência para API
-      
-      logger.info(`Processing with batch size: ${effectiveBatchSize}, max concurrent API calls: ${maxConcurrent}`);
+      // 🔧 USE SIMPLE QUEUE WITH RPS LIKE HOME DEPOT STANDARD
+      const concurrency = requestsPerSecond || 10; // Use RPS from config
+      logger.store('bestbuy', 'info', `Using concurrency: ${concurrency} requests/second`);
+      const queue = new SimpleQueue({ concurrency });
       
       let progress = {
         totalProducts: products.length,
@@ -484,36 +551,103 @@ class BestBuyProvider extends BaseProvider {
         failCount: 0,
         updatedProducts: 0,
         startTime: startTime,
-        isRunning: true, // Adicionar para consistência com chamadas de loop
-        phase: 1,        // Adicionar para consistência
-        completed: false // Adicionar para consistência
+        isRunning: true,
+        phase: 1,
+        completed: false
       };
 
       if (updateProgress) {
-        logger.info(`[BB Provider] Calling initial updateProgress: ${JSON.stringify(progress)}`);
         updateProgress(progress);
       }
 
-      // 🔧 PROCESSAR EM LOTES, AGORA PASSANDO O CONTROLE DE PROGRESSO
-      await this.processProductsBatchWithCorrectSize(
-        products,
-        effectiveBatchSize,
-        maxConcurrent,
-        checkCancellation,
-        progress, // Passa o objeto de progresso
-        updateProgress // Passa a função de callback
-      );
+      // Process all products individually with rate limiting using SimpleQueue
+      const promises = [];
+      let isCancelled = false;
       
-      // O loop forEach foi movido para dentro de processProductsBatchWithCorrectSize
-      // e não é mais necessário aqui. O objeto 'progress' foi atualizado por referência.
+      for (const product of products) {
+        if (checkCancellation && checkCancellation()) {
+          logger.store('bestbuy', 'info', 'Phase 1 cancelled by user.');
+          isCancelled = true;
+          // Clear pending tasks from queue
+          const clearedTasks = queue.clear();
+          logger.store('bestbuy', 'info', `Cleared ${clearedTasks} pending tasks from queue.`);
+          break;
+        }
 
+        // Add to queue without await to allow parallel processing
+        const promise = queue.add(async () => {
+          try {
+            const result = await this.updateProductInDb(product);
+            
+            // Update progress based on status
+            progress.processedProducts++;
+            if (result.status === 'failed') {
+              progress.failCount++;
+            } else {
+              progress.successCount++;
+              if (result.status === 'updated') {
+                progress.updatedProducts++;
+              }
+            }
+            
+            // Update progress callback if provided
+            if (updateProgress) {
+              updateProgress(progress);
+            }
+            
+          } catch (error) {
+            logger.store('bestbuy', 'error', `❌ Error processing product ${product.sku}: ${error.message}`);
+            progress.processedProducts++;
+            progress.failCount++;
+            
+            if (updateProgress) {
+              updateProgress(progress);
+            }
+          }
+        });
+        
+        promises.push(promise);
+      }
+
+      // Wait for all tasks to complete if not cancelled
+      if (!isCancelled) {
+        await Promise.all(promises);
+      }
+      
       const endTime = Date.now();
       const duration = (endTime - startTime) / 1000;
       
       logger.info(`Phase 1 completed in ${duration.toFixed(2)} seconds`);
       logger.info(`Results: Processed=${progress.processedProducts}, Success=${progress.successCount}, Failed=${progress.failCount}, Updated=${progress.updatedProducts}`);
+      
+      // Add problematic products count if any
+      if (this.problematicProducts && this.problematicProducts.length > 0) {
+        logger.info(`Problematic products (marked): ${this.problematicProducts.length}`);
+      }
 
       if (updateProgress) updateProgress(progress);
+
+      this.stopRequestMonitoring();
+
+      // Batch update all problematic products
+      if (this.problematicProducts.length > 0) {
+        logger.info(`❌ Updating ${this.problematicProducts.length} problematic products in database...`);
+        try {
+          // Create placeholders for the query
+          const placeholders = this.problematicProducts.map((_, index) => `$${index + 2}`).join(', ');
+          const query = `
+            UPDATE produtos 
+            SET sku_problem = true, atualizado = $1, last_update = NOW() 
+            WHERE sku IN (${placeholders}) AND source = 'Best Buy'
+          `;
+          const params = [this.updateFlagValue, ...this.problematicProducts];
+          
+          await this.dbService.executeWithRetry(query, params);
+          logger.info(`✅ Successfully marked ${this.problematicProducts.length} products as problematic`);
+        } catch (error) {
+          logger.error(`Failed to batch update problematic products: ${error.message}`);
+        }
+      }
 
       return {
         success: true,
@@ -600,6 +734,22 @@ class BestBuyProvider extends BaseProvider {
       throw error;
     } finally {
       await this.close();
+    }
+  }
+
+  /**
+   * Monitora requests pendentes e registra se alguma está demorando muito
+   */
+  startRequestMonitoring() {
+    this.requestMonitorInterval = setInterval(() => {
+      this.checkPendingRequests();
+    }, 15000); // Verifica a cada 15 segundos
+  }
+
+  stopRequestMonitoring() {
+    if (this.requestMonitorInterval) {
+      clearInterval(this.requestMonitorInterval);
+      this.requestMonitorInterval = null;
     }
   }
 }

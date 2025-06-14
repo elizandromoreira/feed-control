@@ -5,8 +5,6 @@
  */
 
 const HomeDepotProvider = require('./home-depot-provider');
-const ZoroProvider = require('./zoro-provider');
-const WhiteCapProvider = require('./whitecap-provider');
 const VitacostProvider = require('./vitacost-provider');
 const BestBuyProvider = require('./bestbuy-provider');
 const WebstaurantstoreProvider = require('./webstaurantstore-provider');
@@ -28,12 +26,6 @@ class ProviderFactory {
   registerDefaultProviders() {
     // Register Home Depot provider
     this.registerProvider('homedepot', HomeDepotProvider);
-    
-    // Register Zoro provider
-    this.registerProvider('zoro', ZoroProvider);
-    
-    // Register White Cap provider
-    this.registerProvider('whitecap', WhiteCapProvider);
     
     // Register Vitacost provider
     this.registerProvider('vitacost', VitacostProvider);

@@ -12,9 +12,34 @@ const { Command } = require('commander');
 const path = require('path');
 const fs = require('fs').promises;
 const configureLogging = require('./src/config/logging');
-const cron = require('node-cron');
 const { getStoreConfig, getAllStoreConfigs, updateStoreConfig } = require('./src/services/storeConfigService');
 const { syncStoreWithProvider, runStorePhase } = require('./src/sync/sync-service');
+const logsRouter = require('./src/routes/logs');
+const feedSearchRouter = require('./src/routes/feedSearch');
+const logger = configureLogging();
+logger.info("Iniciando a aplicação Feed Control.");
+
+// ========== HANDLERS DE ERRO GLOBAL ==========
+// Capturar erros não tratados que podem estar causando crashes
+process.on('uncaughtException', (error) => {
+    logger.error('=== UNCAUGHT EXCEPTION ===');
+    logger.error('Error:', error.message);
+    logger.error('Stack:', error.stack);
+    logger.error('==============================');
+    
+    // Não fazer exit(), apenas logar para investigação
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('=== UNHANDLED PROMISE REJECTION ===');
+    logger.error('Reason:', reason);
+    logger.error('Promise:', promise);
+    logger.error('===================================');
+    
+    // Não fazer exit(), apenas logar para investigação
+});
+
+// ========== FIM DOS HANDLERS ==========
 
 const app = express();
 const PORT = process.env.PORT || 7005;
@@ -43,7 +68,7 @@ app.use((req, res, next) => {
     // Registrar apenas se passou tempo suficiente desde o último log deste endpoint
     // ou se não é uma requisição de polling ou se houver um parâmetro verbose=true
     if (!isPollingRequest || (now - lastTime > logInterval)) {
-        logger.info(`[REQUEST] ${req.method} ${req.originalUrl}`);
+        // logger.info(`[REQUEST] ${req.method} ${req.originalUrl}`); // COMENTADO - não mostrar logs de REQUEST
         if (Object.keys(req.body).length > 0) {
             logger.info(`[REQUEST BODY] ${JSON.stringify(req.body, null, 2)}`);
         }
@@ -73,6 +98,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// Rotas
+app.use('/api/logs', logsRouter);
+app.use('/api/feeds', feedSearchRouter);
+
 // Estado em memória (agora para tarefas e progresso, não mais para configuração)
 const scheduledTasks = {};
 const cancellationFlags = {};
@@ -80,9 +109,6 @@ const progressInfo = {};
 
 const LOG_DIR = path.join(__dirname, 'logs');
 fs.mkdir(LOG_DIR, { recursive: true }).catch(err => console.error('Erro ao criar diretório de logs:', err));
-
-let logger = configureLogging();
-logger.info("Iniciando a aplicação Feed Control.");
 
 /**
  * Lógica de sincronização principal para uma loja.
@@ -113,8 +139,27 @@ async function syncStore(storeId) {
 
         const checkCancellation = () => cancellationFlags[storeId];
         const updateProgress = (progressUpdate) => {
-            // Log para ver o que está chegando do provedor
-            logger.info(`[Index UpdateProgress] Received update for ${storeId} (processed: ${progressUpdate?.processedProducts}): ${JSON.stringify(progressUpdate)}`);
+            const previousProgress = progressInfo[storeId] || {};
+            
+            // Verifica se houve mudança significativa
+            const hasSignificantChange = 
+                progressUpdate.processedProducts !== previousProgress.processedProducts ||
+                progressUpdate.phase !== previousProgress.phase ||
+                progressUpdate.currentBatch !== previousProgress.currentBatch ||
+                progressUpdate.batchStatus !== previousProgress.batchStatus ||
+                progressUpdate.errors?.length !== previousProgress.errors?.length;
+            
+            // Só loga se houver mudança significativa
+            if (hasSignificantChange) {
+                // Log resumido ao invés do JSON completo
+                const summary = {
+                    processed: progressUpdate.processedProducts || 0,
+                    phase: progressUpdate.phase || 1,
+                    batch: progressUpdate.currentBatch ? `${progressUpdate.currentBatch}/${progressUpdate.totalBatches}` : 'N/A',
+                    status: progressUpdate.batchStatus || 'processing'
+                };
+                logger.info(`[Progress] ${storeId}: ${JSON.stringify(summary)}`);
+            }
             
             // Mantém o isRunning do estado global a menos que o progressUpdate explicitamente o defina
             const currentIsRunning = progressInfo[storeId]?.isRunning;
@@ -124,7 +169,6 @@ async function syncStore(storeId) {
                 isRunning: progressUpdate.isRunning !== undefined ? progressUpdate.isRunning : currentIsRunning,
                 lastUpdateTime: new Date().toISOString()
             };
-            logger.info(`[Index UpdateProgress] progressInfo for ${storeId} AFTER update (processed: ${progressInfo[storeId]?.processedProducts}): ${JSON.stringify(progressInfo[storeId])}`);
         };
 
         const result = await syncStoreWithProvider(
@@ -164,36 +208,113 @@ async function syncStore(storeId) {
 }
 
 /**
- * Agenda uma tarefa cron para uma loja ou a atualiza se já existir.
+ * Agenda uma tarefa para uma loja ou a atualiza se já existir.
+ * Usa setTimeout recursivo para controle preciso do timing baseado no último sync.
  * @param {Object} storeConfig - Objeto de configuração da loja do banco de dados.
  */
 function scheduleTask(storeConfig) {
-    const { storeId, scheduleIntervalHours } = storeConfig;
+    const { storeId, scheduleIntervalHours, lastSyncAt } = storeConfig;
 
+    // Parar tarefa existente se houver
     if (scheduledTasks[storeId]) {
-        scheduledTasks[storeId].stop();
+        if (scheduledTasks[storeId].timeout) {
+            clearTimeout(scheduledTasks[storeId].timeout);
+        }
+        if (scheduledTasks[storeId].stop) {
+            scheduledTasks[storeId].stop();
+        }
         logger.info(`Parando tarefa agendada existente para a loja ${storeId} antes de reagendar.`);
     }
 
-    // Validação para garantir que o intervalo é válido para o cron
+    // Validação do intervalo
     if (!scheduleIntervalHours || scheduleIntervalHours < 1) {
         logger.warn(`Intervalo de agendamento inválido (${scheduleIntervalHours}) para a loja ${storeId}. A tarefa não será agendada.`);
         return;
     }
 
-    const task = cron.schedule(`0 */${scheduleIntervalHours} * * *`, async () => {
-        logger.info(`[CRON] Executando sincronização agendada para a loja: ${storeId}`);
-        if (progressInfo[storeId]?.isRunning) {
-            logger.warn(`[CRON] Sincronização para a loja ${storeId} já está em andamento. Pulando esta execução.`);
-            return;
-        }
-        await syncStore(storeId);
-    });
+    // Função recursiva para agendar próxima execução
+    function scheduleNext() {
+        const now = new Date();
+        let nextRunTime;
 
-    scheduledTasks[storeId] = task;
+        if (lastSyncAt) {
+            // Calcular próxima execução baseada no último sync
+            const lastSync = new Date(lastSyncAt);
+            const intervalMs = scheduleIntervalHours * 60 * 60 * 1000;
+            const timeSinceLastSync = now.getTime() - lastSync.getTime();
+            
+            // Se passou mais de 2x o intervalo, considerar muito atrasado
+            const isVeryOverdue = timeSinceLastSync > (intervalMs * 2);
+            
+            if (isVeryOverdue) {
+                // Muito atrasado: agendar para o próximo intervalo a partir de agora
+                nextRunTime = new Date(now.getTime() + intervalMs);
+                logger.info(`[SCHEDULE] Loja ${storeId} muito atrasada (${Math.round(timeSinceLastSync/1000/60/60)} horas). Reagendando para ${intervalMs/1000/60/60} horas a partir de agora.`);
+            } else {
+                // Calcular próxima execução normal
+                nextRunTime = new Date(lastSync.getTime() + intervalMs);
+                
+                // Se já passou, calcular próxima baseada no tempo atual
+                if (nextRunTime <= now) {
+                    nextRunTime = new Date(now.getTime() + intervalMs);
+                }
+            }
+        } else {
+            // Se não há último sync, executar em 1 hora
+            nextRunTime = new Date(now.getTime() + 60 * 60 * 1000);
+        }
+
+        const delayMs = nextRunTime.getTime() - now.getTime();
+        
+        logger.info(`[SCHEDULE] Loja ${storeId}: próxima execução em ${nextRunTime.toISOString()} (em ${Math.round(delayMs/1000/60)} minutos)`);
+
+        const timeout = setTimeout(async () => {
+            logger.info(`[SCHEDULE] Executando sincronização agendada para a loja: ${storeId}`);
+            
+            if (progressInfo[storeId]?.isRunning) {
+                logger.warn(`[SCHEDULE] Sincronização para a loja ${storeId} já está em andamento. Pulando esta execução.`);
+            } else {
+                try {
+                    await syncStore(storeId);
+                } catch (error) {
+                    logger.error(`[SCHEDULE] Erro na sincronização agendada da loja ${storeId}:`, error);
+                }
+            }
+            
+            // Reagendar próxima execução
+            const updatedConfig = await getStoreConfig(storeId);
+            
+            // ⚠️ CRÍTICO: Verificar se o agendamento ainda está ativo ANTES de reagendar
+            // Também verificar se a tarefa ainda existe em scheduledTasks
+            if (updatedConfig && updatedConfig.isScheduleActive && scheduledTasks[storeId]) {
+                logger.info(`[SCHEDULE] Reagendando próxima execução para loja ${storeId} (agendamento ainda ativo)`);
+                scheduleNext();
+            } else {
+                logger.info(`[SCHEDULE] Agendamento desativado para loja ${storeId}. Não reagendando.`);
+                if (scheduledTasks[storeId]) {
+                    if (scheduledTasks[storeId].timeout) {
+                        clearTimeout(scheduledTasks[storeId].timeout);
+                    }
+                    delete scheduledTasks[storeId];
+                }
+            }
+        }, delayMs);
+
+        // Salvar referência do timeout
+        scheduledTasks[storeId] = {
+            timeout: timeout,
+            nextRun: nextRunTime,
+            stop: () => {
+                clearTimeout(timeout);
+                logger.info(`[SCHEDULE] Tarefa da loja ${storeId} interrompida.`);
+            }
+        };
+    }
+
+    // Iniciar o agendamento
+    scheduleNext();
     logger.info(`Sincronização para a loja ${storeId} agendada para rodar a cada ${scheduleIntervalHours} horas.`);
 }
-
 
 // --- ROTAS DA API ---
 
@@ -268,7 +389,7 @@ app.get('/api/stores/:storeId/config', async (req, res) => {
         const memoryProgress = progressInfo[storeId] || {};
         const memoryIsRunning = memoryProgress.isRunning === true;
         
-        // Determinar o status real combinando o banco de dados e o estado em memória
+        // Determinar o status real de sincronização combinando o banco de dados e o estado em memória
         const isRunningSyncStatus = isSyncRunning || memoryIsRunning;
         
         // Controle de logs para reduzir volume
@@ -299,17 +420,6 @@ app.get('/api/stores/:storeId/config', async (req, res) => {
     }
 });
 
-// Função auxiliar para traduzir status para inglês
-function translateStatusToEnglish(status) {
-    const statusMap = {
-        'Executando': 'Running',
-        'Inativo': 'Inactive',
-        'Erro': 'Error',
-        'Ativo': 'Active'
-    };
-    return statusMap[status] || status;
-}
-
 app.get('/api/stores/:storeId/logs', async (req, res) => {
     // Rota stub para compatibilidade. Retorna um array vazio.
     res.json([]);
@@ -317,7 +427,8 @@ app.get('/api/stores/:storeId/logs', async (req, res) => {
 
 // Variável para controlar a frequência de logs do endpoint /api/stores/:storeId/progress
 let lastProgressLogTime = {};
-const PROGRESS_LOG_INTERVAL = 60000; // 60 segundos entre logs detalhados
+let lastProgressState = {};
+const PROGRESS_LOG_INTERVAL = 300000; // 5 minutos entre logs detalhados (aumentado de 60s)
 
 app.get('/api/stores/:storeId/progress', async (req, res) => {
     const { storeId } = req.params;
@@ -334,24 +445,48 @@ app.get('/api/stores/:storeId/progress', async (req, res) => {
         // Determinar o status real de sincronização combinando o banco de dados e o estado em memória
         const isRunningSyncStatus = dbSyncRunning || memoryIsRunning;
         
-        // Controle de logs para reduzir volume
+        // Calcular porcentagem
+        let percentage = 0;
+        if (currentProgress?.totalProducts > 0 && typeof currentProgress?.processedProducts === 'number') {
+            percentage = Math.round((currentProgress.processedProducts / currentProgress.totalProducts) * 100);
+        }
+        
+        // Controle de logs inteligente
         const now = Date.now();
         const lastTime = lastProgressLogTime[storeId] || 0;
-        const shouldLog = (now - lastTime > PROGRESS_LOG_INTERVAL || req.query.verbose === 'true') && 
-                         (currentProgress || dbSyncRunning);
+        const lastState = lastProgressState[storeId] || {};
         
-        // Só logar se houver progresso em memória ou se a sincronização estiver ativa no banco
-        // E se passou o tempo mínimo entre logs ou estiver em modo verbose
-        if (shouldLog) {
+        // Detecta mudanças significativas
+        const hasStatusChange = lastState.isRunning !== isRunningSyncStatus;
+        const hasProgressChange = Math.abs((lastState.percentage || 0) - percentage) >= 10; // Mudança de 10% ou mais
+        const hasPhaseChange = currentProgress?.phase !== lastState.phase;
+        const hasErrorChange = (currentProgress?.errors?.length || 0) !== (lastState.errorCount || 0);
+        
+        // Só loga se: mudou status, progresso significativo, mudou fase, novo erro, ou passou muito tempo
+        const shouldLog = hasStatusChange || hasProgressChange || hasPhaseChange || hasErrorChange ||
+                         (now - lastTime > PROGRESS_LOG_INTERVAL && isRunningSyncStatus);
+        
+        if (shouldLog && (currentProgress || dbSyncRunning)) {
             lastProgressLogTime[storeId] = now;
+            lastProgressState[storeId] = {
+                isRunning: isRunningSyncStatus,
+                percentage: percentage,
+                phase: currentProgress?.phase,
+                errorCount: currentProgress?.errors?.length || 0
+            };
             
-            // Calcular porcentagem para o log
-            let percentage = 0;
-            if (currentProgress?.totalProducts > 0 && typeof currentProgress?.processedProducts === 'number') {
-                percentage = Math.round((currentProgress.processedProducts / currentProgress.totalProducts) * 100);
+            // Log conciso com informações relevantes
+            const logInfo = {
+                status: isRunningSyncStatus ? 'running' : 'stopped',
+                progress: `${percentage}%`,
+                phase: currentProgress?.phase || 'N/A'
+            };
+            
+            if (hasErrorChange && currentProgress?.errors?.length > 0) {
+                logInfo.errors = currentProgress.errors.length;
             }
             
-            logger.info(`[API /progress GET] Store ${storeId} - Status: ${isRunningSyncStatus ? 'running' : 'stopped'}, Progress: ${percentage}%`);
+            logger.info(`[Progress] ${storeId}: ${JSON.stringify(logInfo)}`);
         }
         
         // Se não está rodando em nenhum lugar (nem banco nem memória), sinalizar para parar o polling
@@ -388,7 +523,7 @@ app.get('/api/stores/:storeId/progress', async (req, res) => {
                 successCount: 0,
                 failCount: 0,
                 status: isRunningSyncStatus ? 'Running' : 'Inactive',
-                shouldStopPolling: shouldStopPolling // Sempre incluir este campo
+                shouldStopPolling: shouldStopPolling // Sinalizar para o frontend parar o polling em caso de erro
             });
         }
     } catch (error) {
@@ -490,6 +625,17 @@ app.post('/api/stores/:storeId/sync/stop', async (req, res) => {
         // Definir flag de cancelamento
         cancellationFlags[storeId] = true;
         
+        // Verificar se há sincronização realmente rodando
+        const isActuallyRunning = progressInfo[storeId]?.isRunning;
+        
+        if (!isActuallyRunning) {
+            logger.warn(`[SYNC/STOP] Tentativa de parar sincronização para ${storeId}, mas não há sincronização em andamento.`);
+            return res.status(400).json({ 
+                message: 'Não há sincronização em andamento para parar.',
+                isRunning: false 
+            });
+        }
+        
         // Atualizar o status no banco de dados
         await updateStoreConfig(storeId, { 
             is_sync_running: false,
@@ -502,8 +648,11 @@ app.post('/api/stores/:storeId/sync/stop', async (req, res) => {
             progressInfo[storeId].completed = true;
         }
         
-        logger.info(`Sinal de cancelamento enviado para a loja ${storeId}. Status atualizado no banco de dados.`);
-        res.json({ message: 'Sinal de cancelamento enviado e status atualizado.' });
+        logger.info(`[SYNC/STOP] Sinal de cancelamento enviado para a loja ${storeId}. Sincronização será interrompida.`);
+        res.json({ 
+            message: 'Sinal de cancelamento enviado. Sincronização será interrompida.',
+            isRunning: false
+        });
     } catch (error) {
         logger.error(`Erro ao parar sincronização para ${storeId}: ${error.message}`);
         res.status(500).json({ message: 'Erro ao parar sincronização.' });
@@ -515,7 +664,7 @@ app.get('/api/stores/:storeId/schedule/status', async (req, res) => {
     try {
         const config = await getStoreConfig(storeId);
         if (!config) return res.status(404).json({ message: 'Loja não encontrada' });
-        res.json({ active: config.is_schedule_active, interval: config.schedule_interval_hours });
+        res.json({ active: config.isScheduleActive, interval: config.scheduleIntervalHours });
     } catch (error) {
         logger.error(`Erro ao verificar status para ${storeId}: ${error.message}`);
         res.status(500).json({ message: 'Erro ao verificar status.' });
@@ -540,7 +689,7 @@ app.get('/api/stores/:storeId/next-sync', async (req, res) => {
         }
         
         const config = await getStoreConfig(storeId);
-        if (!config || !config.is_schedule_active) {
+        if (!config || !config.isScheduleActive) {
             return res.json({ scheduled: false, message: "Agendamento inativo." });
         }
         if (progressInfo[storeId]?.isRunning) {
@@ -548,18 +697,50 @@ app.get('/api/stores/:storeId/next-sync', async (req, res) => {
         }
         
         const task = scheduledTasks[storeId];
-        if(task) {
-            const nextRun = task.nextDates();
+        if(task && task.nextRun) {
+            // Usar o nextRun já calculado pelo agendador
+            const actualNextRun = task.nextRun;
+            const now = new Date();
+            const minutesUntilNextSync = Math.round((actualNextRun - now) / (1000 * 60));
             
             if (shouldLog) {
-                logger.info(`[API /next-sync GET] Store ${storeId} - Next sync scheduled for: ${nextRun.toLocaleString()}`);
+                logger.info(`[API /next-sync GET] Store ${storeId} - Next sync scheduled for: ${actualNextRun.toLocaleString()}`);
             }
             
             res.json({
                 scheduled: true,
                 isRunning: false,
-                nextSyncTimestamp: nextRun.getTime(),
-                message: `Próxima execução em: ${nextRun.toLocaleString()}`
+                nextSync: actualNextRun.toISOString(),
+                nextSyncTimestamp: actualNextRun.getTime(),
+                minutesUntilNextSync: Math.max(0, minutesUntilNextSync),
+                message: `Próxima execução em: ${actualNextRun.toLocaleString()}`
+            });
+        } else if(task && config.lastSyncAt && config.scheduleIntervalHours) {
+            // Fallback: calcular manualmente se nextRun não está disponível
+            const lastSync = new Date(config.lastSyncAt);
+            const intervalMs = config.scheduleIntervalHours * 60 * 60 * 1000;
+            const nextRun = new Date(lastSync.getTime() + intervalMs);
+            const now = new Date();
+            
+            // Se a próxima execução já passou, calcular a próxima
+            let actualNextRun = nextRun;
+            while (actualNextRun < now) {
+                actualNextRun = new Date(actualNextRun.getTime() + intervalMs);
+            }
+            
+            const minutesUntilNextSync = Math.round((actualNextRun - now) / (1000 * 60));
+            
+            if (shouldLog) {
+                logger.info(`[API /next-sync GET] Store ${storeId} - Next sync calculated: ${actualNextRun.toLocaleString()}`);
+            }
+            
+            res.json({
+                scheduled: true,
+                isRunning: false,
+                nextSync: actualNextRun.toISOString(),
+                nextSyncTimestamp: actualNextRun.getTime(),
+                minutesUntilNextSync: Math.max(0, minutesUntilNextSync),
+                message: `Próxima execução em: ${actualNextRun.toLocaleString()}`
             });
         } else {
             res.json({ scheduled: true, isRunning: false, message: "Agendado, aguardando próximo ciclo." });
@@ -582,8 +763,8 @@ app.post('/api/stores/:storeId/schedule', async (req, res) => {
 
     try {
         const updatedConfig = await updateStoreConfig(storeId, {
-            is_schedule_active: true,
-            schedule_interval_hours: intInterval,
+            isScheduleActive: true,
+            scheduleIntervalHours: intInterval,
         });
 
         // Após atualizar o BD, precisamos recriar/atualizar a tarefa cron em memória
@@ -605,15 +786,30 @@ app.post('/api/stores/:storeId/schedule', async (req, res) => {
 app.post('/api/stores/:storeId/schedule/cancel', async (req, res) => {
     const { storeId } = req.params;
     try {
-        await updateStoreConfig(storeId, { is_schedule_active: false });
-
+        // 1. Primeiro, parar a tarefa em memória ANTES de atualizar o BD
         if (scheduledTasks[storeId]) {
-            scheduledTasks[storeId].stop();
+            if (scheduledTasks[storeId].timeout) {
+                clearTimeout(scheduledTasks[storeId].timeout);
+                logger.info(`[SCHEDULE/CANCEL] Timeout limpo para loja ${storeId}`);
+            }
+            if (scheduledTasks[storeId].stop) {
+                scheduledTasks[storeId].stop();
+            }
             delete scheduledTasks[storeId];
-            logger.info(`Agendamento em memória para a loja ${storeId} foi interrompido.`);
+            logger.info(`[SCHEDULE/CANCEL] Agendamento em memória para a loja ${storeId} foi completamente removido.`);
         }
-
-        res.json({ message: 'Agendamento cancelado com sucesso.' });
+        
+        // 2. Depois atualizar o banco de dados
+        await updateStoreConfig(storeId, { 
+            isScheduleActive: false,
+            // Não alterar o scheduleIntervalHours para preservar a configuração
+        });
+        
+        logger.info(`[SCHEDULE/CANCEL] Agendamento cancelado com sucesso para loja ${storeId}`);
+        res.json({ 
+            message: 'Agendamento cancelado com sucesso.',
+            isScheduleActive: false
+        });
     } catch (error) {
         logger.error(`Erro ao cancelar agendamento para a loja ${storeId}: ${error.message}`);
         res.status(500).json({ message: 'Erro ao cancelar o agendamento.' });
@@ -631,7 +827,10 @@ app.post('/api/stores/:storeId/schedule/stop', async (req, res) => {
         }
 
         // Atualiza o status no banco de dados
-        await updateStoreConfig(storeId, { is_schedule_active: false });
+        await updateStoreConfig(storeId, { 
+            isScheduleActive: false,
+            // Não alterar o scheduleIntervalHours para preservar a configuração
+        });
 
         res.json({ message: `Agendamento para a loja ${storeId} foi desativado.` });
     } catch (error) {
@@ -647,7 +846,7 @@ async function initializeSchedulesFromDB() {
     logger.info('Inicializando agendamentos a partir do banco de dados...');
     try {
         const allConfigs = await getAllStoreConfigs();
-        const activeSchedules = allConfigs.filter(c => c.is_schedule_active);
+        const activeSchedules = allConfigs.filter(c => c.isScheduleActive);
 
         logger.info(`Encontrados ${activeSchedules.length} agendamentos ativos para restaurar.`);
         activeSchedules.forEach(scheduleTask);
@@ -696,9 +895,8 @@ async function main() {
     // ... (lógica de argumentos da CLI pode ser adicionada aqui se necessário)
 
     // Inicializar o servidor
-    const PORT = process.env.PORT || 7005;
-    app.listen(PORT, '0.0.0.0', async () => {
-        logger.info(`Servidor rodando em http://0.0.0.0:${PORT}`);
+    app.listen(PORT, HOST, async () => {
+        logger.info(`Servidor rodando em http://${HOST}:${PORT}`);
         
         // Resetar status de sincronização de todas as lojas
         await resetAllSyncStatus();

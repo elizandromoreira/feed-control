@@ -117,12 +117,12 @@ const API_CONFIGS = {
     
     homedepot: {
         name: 'Home Depot',
-        baseUrl: 'http://example.com/api/homedepot',
+        baseUrl: 'http://167.114.223.83:3005/hd/api',
         fetchTestEndpoints: async () => {
             try {
                 const client = await pool.connect();
                 const result = await client.query(
-                    'SELECT sku FROM produtos WHERE source = $1 LIMIT 30',
+                    'SELECT sku FROM produtos WHERE source = $1 AND sku_problem IS NOT TRUE ORDER BY last_update ASC LIMIT 30',
                     ['Home Depot']
                 );
                 client.release();
@@ -135,11 +135,21 @@ const API_CONFIGS = {
                 console.log(`✅ Buscados ${skus.length} SKUs reais do banco (Home Depot)`);
                 return skus;
             } catch (error) {
-                console.warn('Usando SKUs padrão para Home Depot');
-                return ['SKU1', 'SKU2', 'SKU3']; // Substitua pelos SKUs reais
+                console.warn('Usando SKUs padrão para Home Depot:', error.message);
+                return [
+                    '312764063', '320028546', '305659754', '313872047', '317859649',
+                    '314538708', '311723583', '312370507', '307949254', '311931486',
+                    '320844638', '317818085', '313833271', '323676662', '311931790',
+                    '325838727', '315132904', '205641025', '326738782', '325889136',
+                    '322053964', '315410924', '203068909', '100597369', '202831863',
+                    '313660471', '334993349', '326750753', '202554323', '314013758'
+                ];
             }
         },
-        validateResponse: (response) => response.status === 200 && response.data?.status === 'success',
+        validateResponse: (response) => {
+            // A API do Home Depot retorna dados do produto diretamente
+            return response.status === 200 && response.data && !response.data.error;
+        },
         headers: { 'User-Agent': 'CapacityTest/1.0' },
         timeout: 15000
     },

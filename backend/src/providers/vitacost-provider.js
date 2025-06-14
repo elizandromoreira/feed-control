@@ -10,53 +10,65 @@ const DatabaseService = require('../services/database');
 const { DB_CONFIG } = require('../config/db');
 const logger = require('../config/logging')();
 const axios = require('axios');
-const retry = require('async-retry');
+const SimpleQueue = require('../utils/SimpleQueue');
 
 /**
  * Vitacost Provider implementation
  */
 class VitacostProvider extends BaseProvider {
   /**
-   * @param {Object} config - Provider configuration
+   * @param {Object} config - Provider configuration from the database
    */
   constructor(config = {}) {
     super(config);
+    
+    // Configuration from DB or fallbacks
     this.apiBaseUrl = config.apiBaseUrl || process.env.VITACOST_API_BASE_URL || 'http://167.114.223.83:3005/vc';
+    this.stockLevel = config.stockLevel ?? 5;
+    this.batchSize = config.batchSize ?? 240;
+    this.handlingTimeOmd = config.handlingTimeOmd ?? 2;
+    this.providerSpecificHandlingTime = config.providerSpecificHandlingTime ?? 2;
+    this.requestsPerSecond = config.requestsPerSecond ?? 7;
+    this.updateFlagValue = config.updateFlagValue ?? 2;
+    
+    // Services
     this.dbService = new DatabaseService(DB_CONFIG);
     
-    // Debug das variáveis de ambiente no construtor
-    logger.info('=== DEBUG VitacostProvider constructor ===');
-    logger.info(`VITACOST_STOCK_LEVEL (env): ${process.env.VITACOST_STOCK_LEVEL}`);
-    logger.info(`VITACOST_BATCH_SIZE (env): ${process.env.VITACOST_BATCH_SIZE}`);
-    logger.info(`VITACOST_REQUESTS_PER_SECOND (env): ${process.env.VITACOST_REQUESTS_PER_SECOND}`);
-    logger.info(`VITACOST_HANDLING_TIME (env): ${process.env.VITACOST_HANDLING_TIME}`);
-    logger.info(`VITACOST_HANDLING_TIME_OMD (env): ${process.env.VITACOST_HANDLING_TIME_OMD}`);
-    logger.info(`VITACOST_UPDATE_FLAG_VALUE (env): ${process.env.VITACOST_UPDATE_FLAG_VALUE}`);
-    logger.info(`LEAD_TIME_OMD (global env): ${process.env.LEAD_TIME_OMD}`);
+    // Request tracking
+    this.requestCounter = 0;
+    this.pendingRequests = new Map();
     
-    // Usar prioritariamente as variáveis específicas do provider, com fallback para variáveis genéricas
-    this.stockLevel = parseInt(process.env.VITACOST_STOCK_LEVEL || process.env.STOCK_LEVEL || '5', 10);
-    this.batchSize = parseInt(process.env.VITACOST_BATCH_SIZE || process.env.BATCH_SIZE || '240', 10);
-    this.handlingTimeOmd = parseInt(process.env.VITACOST_HANDLING_TIME_OMD || process.env.LEAD_TIME_OMD || '2', 10);
-    this.vitacostHandlingTime = parseInt(process.env.VITACOST_HANDLING_TIME || '2', 10);
-    this.requestsPerSecond = parseInt(process.env.VITACOST_REQUESTS_PER_SECOND || process.env.REQUESTS_PER_SECOND || '7', 10);
-    this.updateFlagValue = parseInt(process.env.VITACOST_UPDATE_FLAG_VALUE || '2', 10);
+    // State Management
+    this.processedCount = 0;
+    this.successCount = 0;
+    this.errorCount = 0;
+    this.inStockSet = new Set();
+    this.outOfStockSet = new Set();
+    this.totalRetries = 0;
+    this.problematicProducts = [];
+    this.failedProducts = [];
     
-    // Debug dos valores após parse
-    logger.info('Valores utilizados após parsear:');
-    logger.info(`- stockLevel: ${this.stockLevel}`);
-    logger.info(`- batchSize: ${this.batchSize}`);
-    logger.info(`- handlingTimeOmd: ${this.handlingTimeOmd}`);
-    logger.info(`- vitacostHandlingTime: ${this.vitacostHandlingTime}`);
-    logger.info(`- requestsPerSecond: ${this.requestsPerSecond}`);
-    logger.info(`- updateFlagValue: ${this.updateFlagValue}`);
-    logger.info('==============================');
+    // Update statistics
+    this.updateStats = {
+      newProducts: 0,
+      updatedProducts: 0,
+      priceChanges: 0,
+      quantityChanges: 0,
+      availabilityChanges: 0,
+      brandChanges: 0,
+      handlingTimeChanges: 0,
+      errors: 0
+    };
     
-    // Contadores para estatísticas de estoque
-    this.inStockCount = 0;
-    this.outOfStockCount = 0;
-    this.retryCount = 0;
-    this.dbInitialized = false;
+    // Log configuration values
+    logger.store('vitacost', 'info', '--- VitacostProvider Configured Values ---');
+    logger.store('vitacost', 'info', '- Source: Database');
+    logger.store('vitacost', 'info', `- OMD Handling Time: ${this.handlingTimeOmd}`);
+    logger.store('vitacost', 'info', `- Provider Handling Time: ${this.providerSpecificHandlingTime}`);
+    logger.store('vitacost', 'info', `- Update Flag Value: ${this.updateFlagValue}`);
+    logger.store('vitacost', 'info', `- Stock Level: ${this.stockLevel}`);
+    logger.store('vitacost', 'info', `- Requests Per Second: ${this.requestsPerSecond}`);
+    logger.store('vitacost', 'info', '-------------------------------------------');
   }
 
   /**
@@ -66,7 +78,7 @@ class VitacostProvider extends BaseProvider {
     if (!this.dbInitialized) {
       await this.dbService.init();
       this.dbInitialized = true;
-      logger.info(`Database connection initialized for ${this.getName()} provider`);
+      logger.store('vitacost', 'info', 'Database connection initialized');
     }
   }
 
@@ -77,7 +89,7 @@ class VitacostProvider extends BaseProvider {
     if (this.dbInitialized) {
       await this.dbService.close();
       this.dbInitialized = false;
-      logger.info(`Database connection closed for ${this.getName()} provider`);
+      logger.store('vitacost', 'info', 'Database connection closed');
     }
   }
 
@@ -97,6 +109,55 @@ class VitacostProvider extends BaseProvider {
     return 'Vitacost';
   }
 
+  generateRequestId() {
+    return ++this.requestCounter;
+  }
+
+  trackRequest(requestId, sku, url) {
+    this.pendingRequests.set(requestId, {
+      sku,
+      url,
+      startTime: Date.now()
+    });
+  }
+
+  completeRequest(requestId, success = true) {
+    const requestInfo = this.pendingRequests.get(requestId);
+    if (requestInfo) {
+      const duration = Date.now() - requestInfo.startTime;
+      logger.store('vitacost', 'info', `[REQ-${requestId}] Request completed for SKU ${requestInfo.sku} - Total duration: ${duration}ms, Success: ${success}`);
+      this.pendingRequests.delete(requestId);
+    }
+  }
+
+  checkPendingRequests() {
+    const now = Date.now();
+    const staleThreshold = 30000; // 30 segundos
+    
+    for (const [requestId, info] of this.pendingRequests) {
+      const age = now - info.startTime;
+      if (age > staleThreshold) {
+        logger.store('vitacost', 'warn', `[REQUEST-MONITOR] REQ-${requestId}: SKU ${info.sku}, Age: ${age}ms, URL: ${info.url}`);
+      }
+    }
+  }
+
+  /**
+   * Monitora requests pendentes e registra se alguma está demorando muito
+   */
+  startRequestMonitoring() {
+    this.requestMonitorInterval = setInterval(() => {
+      this.checkPendingRequests();
+    }, 15000); // Verifica a cada 15 segundos
+  }
+
+  stopRequestMonitoring() {
+    if (this.requestMonitorInterval) {
+      clearInterval(this.requestMonitorInterval);
+      this.requestMonitorInterval = null;
+    }
+  }
+
   /**
    * Get provider API service
    * @returns {Object} API service instance
@@ -112,51 +173,92 @@ class VitacostProvider extends BaseProvider {
   /**
    * Fetch product data from Vitacost API
    * @param {string} sku - Product SKU
-   * @returns {Promise<Object>} Product data
+   * @returns {Object} Product data
    * @private
    */
   async _fetchProductData(sku) {
+    const MAX_ATTEMPTS = 2; // Changed from 3 to 2 (1 initial + 1 retry)
+    const RETRY_DELAY = 2000; // 2 seconds
+    const requestId = this.generateRequestId();
+    const url = `${this.apiBaseUrl}/${sku}`;
+    const startTime = Date.now();
+    
     try {
-      const url = `${this.apiBaseUrl}/${sku}`;
-      logger.info(`Fetching Vitacost product data: ${url}`);
+      this.trackRequest(requestId, sku, url);
+      logger.store('vitacost', 'info', `[REQ-${requestId}] Starting request for SKU ${sku} at ${url}`);
       
-      const response = await retry(
-        async () => {
-          const result = await axios.get(url, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'FeedControl/1.0'
-            },
-            timeout: 30000
-          });
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          // Make request to Vitacost API through our backend endpoint
+          const response = await axios.get(url, { timeout: 30000 }); // 30 second timeout
           
-          if (result.status !== 200) {
-            throw new Error(`API returned status ${result.status}`);
+          const duration = Date.now() - startTime;
+          logger.store('vitacost', 'info', `[REQ-${requestId}] Response received for SKU ${sku} - Status: ${response.status}, Duration: ${duration}ms`);
+          
+          // Log response if we get data
+          if (response.data) {
+            logger.store('vitacost', 'debug', `[REQ-${requestId}] SUCCESS - SKU ${sku} fetched on attempt ${attempt}`);
+            
+            // Check if the API response indicates success
+            if (response.data.success === false) {
+              logger.store('vitacost', 'warn', `[REQ-${requestId}] API FAILURE - SKU ${sku}: API returned success: false`);
+              this.completeRequest(requestId, false);
+              return response.data;
+            }
+            
+            this.completeRequest(requestId, true);
+            return response.data;
           }
           
-          return result;
-        },
-        {
-          retries: 3,
-          minTimeout: 1000,
-          maxTimeout: 5000,
-          onRetry: (error) => {
-            this.retryCount++;
-            logger.warn(`Retry fetching Vitacost data for SKU ${sku}: ${error.message}`);
+          throw new Error('No data in response');
+          
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          
+          if (error.response) {
+            logger.store('vitacost', 'error', `[REQ-${requestId}] HTTP ERROR - SKU ${sku}: Status ${error.response.status}, Duration: ${duration}ms`);
+          } else if (error.code === 'ECONNABORTED') {
+            logger.store('vitacost', 'error', `[REQ-${requestId}] TIMEOUT - SKU ${sku}: Request timed out after ${duration}ms`);
+          } else if (error.code) {
+            logger.store('vitacost', 'error', `[REQ-${requestId}] NETWORK ERROR - SKU ${sku}: ${error.code} - ${error.message}, Duration: ${duration}ms`);
+          } else {
+            logger.store('vitacost', 'error', `[REQ-${requestId}] UNKNOWN ERROR - SKU ${sku}: ${error.message}, Duration: ${duration}ms`);
           }
+          
+          logger.store('vitacost', 'warn', 
+            `Attempt ${attempt}/${MAX_ATTEMPTS} failed for product ${sku}: ${error.message}. ` +
+            (attempt < MAX_ATTEMPTS ? `Retrying in ${RETRY_DELAY}ms...` : '')
+          );
+          
+          if (attempt === MAX_ATTEMPTS) {
+            logger.store('vitacost', 'error', 
+              `Failed to fetch product ${sku} after ${MAX_ATTEMPTS} attempts: ${error.message}`
+            );
+            
+            this.completeRequest(requestId, false);
+            
+            // Return error structure
+            return {
+              success: false,
+              error: error.message,
+              sku: sku
+            };
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         }
-      );
-      
-      if (!response.data || !response.data.success) {
-        throw new Error('Empty response data or unsuccessful response');
       }
-      
-      // Transform API response to our internal format
-      return this._transformProductData(response.data.data, sku);
-      
     } catch (error) {
-      logger.error(`Error fetching Vitacost product data for SKU ${sku}: ${error.message}`);
-      throw error;
+      const duration = Date.now() - startTime;
+      logger.store('vitacost', 'error', `[REQ-${requestId}] FATAL ERROR - SKU ${sku}: ${error.message}, Duration: ${duration}ms`);
+      this.completeRequest(requestId, false);
+      
+      return {
+        success: false,
+        error: error.message,
+        sku: sku
+      };
     }
   }
 
@@ -168,32 +270,61 @@ class VitacostProvider extends BaseProvider {
    * @private
    */
   _transformProductData(apiData, sku) {
-    // Vitacost doesn't provide stock information directly
-    // We'll assume it's in stock if status is "OK"
-    let quantity = 0;
-    const isAvailable = apiData.status === "OK";
-    
-    if (isAvailable) {
-      // Since we don't have actual stock numbers, use stock level as the quantity
-      quantity = this.stockLevel;
-      this.inStockCount++;
-    } else {
-      // Se não está disponível, quantidade deve ser SEMPRE zero
-      // Garantir que quantidade seja estritamente zero para produtos indisponíveis
-      quantity = 0;
-      this.outOfStockCount++;
+    // First check if the API response is valid
+    if (!apiData || apiData.success === false) {
+      logger.store('vitacost', 'warn', `Product ${sku} - API returned success=false or invalid data`);
+      
+      // Mark as problematic if success is false
+      if (apiData && apiData.success === false) {
+        this.problematicProducts.push(sku);
+      }
+      
+      return {
+        sku: sku,
+        price: 0,
+        quantity: 0,
+        availability: 'outOfStock',
+        vitacostHandlingTime: this.providerSpecificHandlingTime,
+        omdHandlingTime: this.handlingTimeOmd,
+        available: false,
+        discontinued: true,
+        brand: '',
+        upc: sku,
+        mfn: '',
+        url: '',
+        rawData: apiData
+      };
     }
     
-    // Usar apenas o tempo de manuseio específico da Vitacost
-    // O handling_time_amz (tempo total) será calculado no momento da atualização do banco de dados
-    const vitacostHandlingTime = this.vitacostHandlingTime;
+    // Extract data from response - API returns data inside 'data' field
+    const productData = apiData.data || apiData;
+    
+    // Calculate quantity and availability based on status
+    let quantity = 0;
+    let availability = 'outOfStock';
+    
+    if (productData.status === "OK" && apiData.success === true) {
+      // Product is available - use stockLevel from config
+      quantity = this.stockLevel;
+      availability = 'inStock';
+      this.inStockSet.add(sku);
+      
+      logger.store('vitacost', 'debug', `Product ${sku} - Available, using stockLevel: ${quantity}`);
+    } else {
+      // Product is not available
+      quantity = 0;
+      availability = 'outOfStock';
+      this.outOfStockSet.add(sku);
+      
+      logger.store('vitacost', 'debug', `Product ${sku} - Unavailable (status: ${productData.status}), quantity: 0`);
+    }
     
     // Parse price from string (remove $ and convert to number)
     let price = 0;
-    if (apiData.price && typeof apiData.price === 'string') {
-      price = parseFloat(apiData.price.replace('$', ''));
-    } else if (apiData.salePrice) {
-      price = apiData.salePrice;
+    if (productData.price && typeof productData.price === 'string') {
+      price = parseFloat(productData.price.replace('$', ''));
+    } else if (productData.salePrice) {
+      price = productData.salePrice;
     }
     
     // Return transformed data
@@ -201,15 +332,15 @@ class VitacostProvider extends BaseProvider {
       sku: sku,
       price: price,
       quantity: quantity,
-      vitacostHandlingTime: vitacostHandlingTime,
+      availability: availability,
+      vitacostHandlingTime: this.providerSpecificHandlingTime,
       omdHandlingTime: this.handlingTimeOmd,
-      available: isAvailable,
-      discontinued: apiData.status !== "OK",
-      title: apiData.name || '',
-      brand: apiData.brand || '',
+      available: productData.status === "OK",
+      discontinued: productData.status !== "OK",
+      brand: productData.brand || '',
       upc: sku,
       mfn: '',
-      url: apiData.url || '',
+      url: productData.url || '',
       rawData: apiData
     };
   }
@@ -223,31 +354,55 @@ class VitacostProvider extends BaseProvider {
    * @returns {Promise<Object>} Result of Phase 1 operations
    */
   async executePhase1(skipProblematic, requestsPerSecond, checkCancellation, updateProgress) {
-    logger.info(`Running Phase 1 for ${this.getName()} provider`);
+    logger.store('vitacost', 'info', 'Starting Phase 1 - Individual Processing Mode');
     
     const startTime = Date.now();
-    const apiService = this.getApiService();
+    const effectiveRPS = requestsPerSecond || this.requestsPerSecond;
     
-    // Inicializar conexão com banco de dados se necessário
+    // Initialize database connection
     await this.init();
     
+    // Start request monitoring
+    this.startRequestMonitoring();
+    
+    // Create simple queue for rate limiting
+    const queue = new SimpleQueue(effectiveRPS);
+    
     try {
-      // Reset contadores para estatísticas
-      this.inStockCount = 0;
-      this.outOfStockCount = 0;
-      this.retryCount = 0;
+      // Reset counters
+      this.processedCount = 0;
+      this.successCount = 0;
+      this.errorCount = 0;
+      this.inStockSet.clear();
+      this.outOfStockSet.clear();
+      this.totalRetries = 0;
+      this.problematicProducts = [];
+      this.updateStats = {
+        newProducts: 0,
+        updatedProducts: 0,
+        priceChanges: 0,
+        quantityChanges: 0,
+        availabilityChanges: 0,
+        brandChanges: 0,
+        handlingTimeChanges: 0,
+        errors: 0
+      };
       
-      // 1. Get products from database
-      const query = `
-        SELECT 
-          sku, sku2 
+      // Get products from database
+      let query = `
+        SELECT sku, sku2, supplier_price, quantity, availability, brand
         FROM produtos 
-        WHERE source = 'Vitacost' 
-        ORDER BY last_update ASC
+        WHERE source = 'Vitacost'
       `;
       
+      if (skipProblematic) {
+        query += ` AND (sku_problem IS NULL OR sku_problem = 0)`;
+      }
+      
+      query += ` ORDER BY last_update ASC`;
+      
       const products = await this.dbService.fetchRowsWithRetry(query);
-      logger.info(`Found ${products.length} Vitacost products to process`);
+      logger.store('vitacost', 'info', `Found ${products.length} products to process`);
       
       // Initialize progress
       let progress = {
@@ -255,272 +410,352 @@ class VitacostProvider extends BaseProvider {
         processedProducts: 0,
         successCount: 0,
         failCount: 0,
-        percentage: 0
+        updatedProducts: 0,
+        percentage: 0,
+        currentBatch: 0,
+        currentSku: '',
+        phase: 'fetching'
       };
       
-      // Update progress if callback provided
       if (updateProgress) {
         updateProgress(progress);
       }
       
-      // Rate limiter setup
-      const rateLimiter = {
-        lastRequestTime: Date.now(),
-        requestDelay: 1000 / (requestsPerSecond || this.requestsPerSecond)
-      };
+      // Process products individually
+      const promises = [];
+      let isCancelled = false;
       
-      // 2. Process each product
       for (let i = 0; i < products.length; i++) {
         // Check for cancellation
         if (checkCancellation && checkCancellation()) {
-          logger.info('Cancellation requested, stopping Vitacost provider Phase 1');
+          logger.store('vitacost', 'info', 'Cancellation requested, stopping Phase 1');
+          isCancelled = true;
+          // Clear pending tasks from queue
+          const clearedTasks = queue.clear();
+          logger.store('vitacost', 'info', `Cleared ${clearedTasks} pending tasks from queue.`);
           break;
         }
         
         const product = products[i];
+        progress.currentSku = product.sku;
         
-        try {
-          // Apply rate limiting
-          const now = Date.now();
-          const elapsed = now - rateLimiter.lastRequestTime;
-          if (elapsed < rateLimiter.requestDelay) {
-            await new Promise(resolve => setTimeout(resolve, rateLimiter.requestDelay - elapsed));
-          }
-          rateLimiter.lastRequestTime = Date.now();
-          
-          // Fetch data from Vitacost API
-          const productData = await apiService.fetchProductDataWithRetry(product.sku);
-          
-          // Buscar os dados atuais do produto antes de atualizar
-          const currentProductQuery = `
-            SELECT supplier_price, quantity, handling_time_amz, brand
-            FROM produtos
-            WHERE sku2 = $1 AND source = 'Vitacost'
-          `;
-          
-          const currentProductData = await this.dbService.fetchRowsWithRetry(currentProductQuery, [product.sku2]);
-          const currentProduct = currentProductData[0] || {};
-          
-          // Calcular o handling time como a soma para comparação
-          const calculatedHandlingTime = productData.vitacostHandlingTime + productData.omdHandlingTime;
-          
-          // Comparar e logar as diferenças
-          let hasChanges = false;
-          let changesLog = [];
-          
-          if (currentProduct) {
-            // Normaliza os valores de preço para evitar problemas de comparação de ponto flutuante
-            const currentPrice = parseFloat(Number(currentProduct.supplier_price || 0).toFixed(2));
-            const newPrice = parseFloat(Number(productData.price || 0).toFixed(2));
-            
-            if (currentPrice !== newPrice) {
-              changesLog.push(`Preço: ${currentPrice} → ${newPrice}`);
-              hasChanges = true;
-            }
-            
-            if (Number(currentProduct.quantity) !== Number(productData.quantity)) {
-              changesLog.push(`Quantidade: ${currentProduct.quantity} → ${productData.quantity}`);
-              hasChanges = true;
-            }
-            
-            // Normalizar handling time para comparação
-            const currentHandlingTime = Number(currentProduct.handling_time_amz || 0);
-            
-            if (currentHandlingTime !== calculatedHandlingTime) {
-              changesLog.push(`Handling Time: ${currentHandlingTime} → ${calculatedHandlingTime}`);
-              hasChanges = true;
-            }
-            
-            if (currentProduct.brand !== productData.brand) {
-              changesLog.push(`Marca: ${currentProduct.brand || 'N/A'} → ${productData.brand}`);
-              hasChanges = true;
-            }
-            
-            // Log somente se houver mudanças, com todas as mudanças em uma única linha
-            if (hasChanges) {
-              logger.info(`Produto ${product.sku2}: Alterações - ${changesLog.join(', ')}`);
-            }
-          } else {
-            // Se o produto não existe no banco ainda, consideramos como uma mudança
-            hasChanges = true;
-            logger.info(`Produto ${product.sku2}: Novo produto adicionado`);
+        // Add to queue and process (without await to allow parallel processing)
+        const promise = queue.add(async () => {
+          // Check cancellation before processing each product
+          if (checkCancellation && checkCancellation()) {
+            logger.store('vitacost', 'info', `Skipping product ${product.sku} due to cancellation.`);
+            return { status: 'cancelled' };
           }
           
-          // Atualiza o banco de dados apenas se houver mudanças
-          if (hasChanges) {
-            // Calcular o handling_time_amz como a soma dos dois tempos de manuseio
-            // Limitar a 29 dias para evitar erro "Value for 'Fulfillment Availability' is greater than the allowed maximum '30'"
-            let handlingTimeAmz = productData.vitacostHandlingTime + productData.omdHandlingTime;
-            if (handlingTimeAmz > 29) {
-              logger.warn(`Tempo de entrega para ${product.sku} excede o limite máximo: ${handlingTimeAmz} dias. Limitando a 29 dias.`);
-              handlingTimeAmz = 29;
-            }
-            
-            // Update database with fetched data
-            // Garantir que availability seja sempre definido com base na quantidade
-            // Produtos com quantidade > 0 devem ser sempre 'inStock'
-            // Produtos com quantidade = 0 devem ser sempre 'outOfStock'
-            const availability = productData.quantity > 0 ? 'inStock' : 'outOfStock';
-            
-            const updateQuery = `
-              UPDATE produtos 
-              SET 
-                supplier_price = $1, 
-                quantity = $2,
-                lead_time = $3,
-                lead_time_2 = $4, 
-                handling_time_amz = $5, 
-                atualizado = $6, 
-                last_update = NOW(),
-                brand = $7,
-                availability = $8
-              WHERE sku2 = $9 AND source = 'Vitacost'
-            `;
-            
-            await this.dbService.executeWithRetry(updateQuery, [
-              productData.price,
-              productData.quantity,
-              productData.omdHandlingTime.toString(),  // lead_time (OMD handling time)
-              productData.vitacostHandlingTime,        // lead_time_2 (Vitacost handling time)
-              handlingTimeAmz,                         // handling_time_amz (soma dos dois)
-              this.updateFlagValue,
-              productData.brand,
-              availability,                            // availability baseado na quantidade
-              product.sku2
-            ]);
-            
+          const result = await this.processProduct(product);
+          
+          if (result.status === 'updated') {
             progress.successCount++;
-          } else {
-            // Se não houver mudanças, apenas atualizamos a data da última verificação
-            const updateLastCheckQuery = `
-              UPDATE produtos 
-              SET 
-                last_update = NOW()
-              WHERE sku2 = $1 AND source = 'Vitacost'
-            `;
-            
-            await this.dbService.executeWithRetry(updateLastCheckQuery, [product.sku2]);
+            progress.updatedProducts++;
+            this.successCount++;
+            this.updateStats.updatedProducts++;
+          } else if (result.status === 'no_changes') {
+            progress.successCount++;
+            this.successCount++;
+          } else if (result.status === 'failed') {
+            progress.failCount++;
+            this.errorCount++;
           }
+          // Note: 'cancelled' status is not counted in any category
           
+          // Update progress
+          progress.processedProducts++;
+          progress.percentage = Math.floor((progress.processedProducts / progress.totalProducts) * 100);
+          
+          if (updateProgress) {
+            updateProgress(progress);
+          }
+        });
+        
+        promises.push(promise);
+      }
+      
+      // Wait for all promises to complete
+      await Promise.all(promises);
+      
+      // Check if cancelled after processing
+      if (!isCancelled && checkCancellation && checkCancellation()) {
+        isCancelled = true;
+      }
+      
+      // Log final statistics
+      const endTime = Date.now();
+      const duration = (endTime - startTime) / 1000;
+      
+      logger.store('vitacost', 'info', '======== Phase 1 Summary ========');
+      logger.store('vitacost', 'info', `Total Products: ${progress.totalProducts}`);
+      logger.store('vitacost', 'info', `Processed: ${this.processedCount}`);
+      logger.store('vitacost', 'info', `Success: ${this.successCount}`);
+      logger.store('vitacost', 'info', `Errors: ${this.errorCount}`);
+      logger.store('vitacost', 'info', `In Stock: ${this.inStockSet.size}`);
+      logger.store('vitacost', 'info', `Out of Stock: ${this.outOfStockSet.size}`);
+      logger.store('vitacost', 'info', `Execution Time: ${duration.toFixed(2)}s`);
+      
+      if (isCancelled) {
+        logger.store('vitacost', 'info', 'Sync was CANCELLED by user');
+      }
+      
+      logger.store('vitacost', 'info', '');
+      logger.store('vitacost', 'info', '=== Update Details ===');
+      logger.store('vitacost', 'info', `Total products updated: ${this.updateStats.updatedProducts}`);
+      if (this.updateStats.priceChanges > 0)
+        logger.store('vitacost', 'info', `  price changes: ${this.updateStats.priceChanges}`);
+      if (this.updateStats.quantityChanges > 0)
+        logger.store('vitacost', 'info', `  quantity changes: ${this.updateStats.quantityChanges}`);
+      if (this.updateStats.availabilityChanges > 0)
+        logger.store('vitacost', 'info', `  availability changes: ${this.updateStats.availabilityChanges}`);
+      if (this.updateStats.brandChanges > 0)
+        logger.store('vitacost', 'info', `  brand changes: ${this.updateStats.brandChanges}`);
+      logger.store('vitacost', 'info', `Stock status: ${this.inStockSet.size} in stock, ${this.outOfStockSet.size} out of stock`);
+      
+      // Add problematic products count
+      if (this.problematicProducts.length > 0) {
+        logger.store('vitacost', 'info', `Problematic products (marked): ${this.problematicProducts.length}`);
+      }
+      
+      logger.store('vitacost', 'info', '===========================');
+      
+      // Batch update all problematic products
+      if (this.problematicProducts.length > 0) {
+        logger.store('vitacost', 'info', `❌ Updating ${this.problematicProducts.length} problematic products in database...`);
+        try {
+          // Create placeholders for the query
+          const placeholders = this.problematicProducts.map((_, index) => `$${index + 2}`).join(', ');
+          const query = `
+            UPDATE produtos 
+            SET sku_problem = true, atualizado = $1, last_update = NOW()
+            WHERE sku2 IN (${placeholders}) AND source = 'Vitacost'
+          `;
+          const params = [this.updateFlagValue, ...this.problematicProducts];
+          
+          await this.dbService.executeWithRetry(query, params);
+          logger.store('vitacost', 'info', `✅ Successfully marked ${this.problematicProducts.length} products as problematic`);
         } catch (error) {
-          logger.error(`Erro no produto ${product.sku}: ${error.message}`);
-          progress.failCount++;
-          
-          // Marcar produto como fora de estoque em caso de erro da API
-          if (error.message.includes('status code 500') || 
-              error.message.includes('status code 404') || 
-              error.message.includes('timeout') ||
-              error.message.includes('Empty response data')) {
-            try {
-              logger.info(`Produto ${product.sku} com erro da API: Marcando como fora de estoque (quantity=0)`);
-              
-              // Buscar produto atual para obter dados necessários
-              const currentProduct = await this.dbService.fetchRowWithRetry(
-                'SELECT supplier_price, lead_time, lead_time_2, brand FROM produtos WHERE sku2 = $1 AND source = $2',
-                [product.sku2, 'Vitacost']
-              );
-              
-              if (currentProduct) {
-                // Preparar dados para atualização
-                const lead_time = currentProduct.lead_time || this.handlingTimeOmd.toString();
-                const lead_time_2 = currentProduct.lead_time_2 || this.vitacostHandlingTime;
-                
-                // Calcular handling_time_amz
-                let handlingTimeAmz = parseInt(lead_time_2, 10) + parseInt(lead_time, 10);
-                if (handlingTimeAmz > 29) {
-                  handlingTimeAmz = 29;
-                }
-                
-                // Atualizar para quantidade zero (fora de estoque)
-                // Quando a quantidade é zero, availability deve ser sempre 'outOfStock'
-                const updateQuery = `
-                  UPDATE produtos 
-                  SET 
-                    quantity = 0,
-                    lead_time = $1,
-                    lead_time_2 = $2,
-                    handling_time_amz = $3,
-                    atualizado = $4,
-                    availability = 'outOfStock',
-                    last_update = NOW()
-                  WHERE sku2 = $5 AND source = 'Vitacost'
-                `;
-                
-                await this.dbService.executeWithRetry(updateQuery, [
-                  lead_time,
-                  lead_time_2,
-                  handlingTimeAmz,
-                  this.updateFlagValue,
-                  product.sku2
-                ]);
-              }
-            } catch (dbError) {
-              logger.error(`Erro ao marcar produto ${product.sku} como fora de estoque: ${dbError.message}`);
-            }
-          }
-          
-          // Log failed product for later analysis
-          try {
-            const logQuery = `
-              INSERT INTO failed_products (sku, source, error, timestamp)
-              VALUES ($1, 'Vitacost', $2, NOW())
-              ON CONFLICT (sku, source) 
-              DO UPDATE SET error = $2, timestamp = NOW()
-            `;
-            
-            await this.dbService.executeWithRetry(logQuery, [
-              product.sku,
-              error.message
-            ]);
-          } catch (logError) {
-            logger.error(`Error logging failed product: ${logError.message}`);
-          }
-        }
-        
-        // Update progress
-        progress.processedProducts++;
-        progress.percentage = Math.floor((progress.processedProducts / progress.totalProducts) * 100);
-        
-        if (updateProgress) {
-          updateProgress(progress);
-        }
-        
-        // Imprimir progresso a cada 100 produtos ou ao final
-        if (progress.processedProducts % 100 === 0 || progress.processedProducts === progress.totalProducts) {
-          logger.info(`Progresso: ${progress.processedProducts}/${progress.totalProducts} (${progress.percentage}%)`);
+          logger.store('vitacost', 'error', `Failed to batch update problematic products: ${error.message}`);
         }
       }
       
-      // Calcular métricas finais
-      const endTime = Date.now();
-      const processingTime = (endTime - startTime) / 1000;
-      const apiCallCount = progress.processedProducts;
-      const requestsPerSecondRate = apiCallCount > 0 ? apiCallCount / processingTime : 0;
-      
-      // Log detalhado de métricas em formato mais conciso
-      logger.info(`
-RESUMO ${this.getName()}: ${progress.successCount}/${progress.totalProducts} produtos atualizados em ${(processingTime / 60).toFixed(2)} min
-Taxa: ${requestsPerSecondRate.toFixed(2)} produtos/s | Em estoque: ${this.inStockCount} | Fora: ${this.outOfStockCount} | Falhas: ${progress.failCount}
-`);
-      
+      // Return results
       return {
-        success: true,
+        success: !isCancelled,
+        cancelled: isCancelled,
+        executionTime: duration,
         totalProducts: progress.totalProducts,
-        successCount: progress.successCount,
-        failCount: progress.failCount,
-        inStockCount: this.inStockCount,
-        outOfStockCount: this.outOfStockCount,
-        processingTime,
-        requestsPerSecondRate
+        processedProducts: this.processedCount,
+        successCount: this.successCount,
+        failCount: this.errorCount,
+        inStock: this.inStockSet.size,
+        outOfStock: this.outOfStockSet.size,
+        problematicProducts: this.problematicProducts,
+        updateStats: this.updateStats
       };
       
     } catch (error) {
-      logger.error(`Error in ${this.getName()} Phase 1: ${error.message}`, { error });
+      logger.store('vitacost', 'error', `Phase 1 error: ${error.message}`, { error });
       throw error;
     } finally {
-      // Garantir que a conexão com o banco de dados seja fechada
+      // Stop request monitoring
+      this.stopRequestMonitoring();
+      
+      // Clear any remaining pending requests
+      this.pendingRequests.clear();
+      
+      // Close database connection
       await this.close();
-      logger.info(`Database connection closed after Phase 1 for ${this.getName()}`);
+      
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
+      // Log final statistics
+      logger.store('vitacost', 'info', '=== VITACOST SYNC STATISTICS ===');
+      logger.store('vitacost', 'info', `Total Products Processed: ${this.processedCount}`);
+      logger.store('vitacost', 'info', `Successful Updates: ${this.successCount}`);
+      logger.store('vitacost', 'info', `Errors: ${this.errorCount}`);
+      logger.store('vitacost', 'info', `Total Duration: ${Math.round(duration / 1000)}s`);
+      logger.store('vitacost', 'info', `Price Changes: ${this.updateStats.priceChanges}`);
+      logger.store('vitacost', 'info', `Quantity Changes: ${this.updateStats.quantityChanges}`);
+      logger.store('vitacost', 'info', `Availability Changes: ${this.updateStats.availabilityChanges}`);
+      logger.store('vitacost', 'info', `Brand Changes: ${this.updateStats.brandChanges}`);
+      logger.store('vitacost', 'info', `Handling Time Changes: ${this.updateStats.handlingTimeChanges}`);
+      logger.store('vitacost', 'info', `In Stock: ${this.inStockSet.size}`);
+      logger.store('vitacost', 'info', `Out of Stock: ${this.outOfStockSet.size}`);
+      logger.store('vitacost', 'info', '===============================');
+    }
+  }
+
+  /**
+   * Mark product as problematic in the database
+   * @param {string} sku - Product SKU
+   * @private
+   */
+  async markProductAsProblematic(sku) {
+    // Just add to array - batch update will be done at the end
+    this.problematicProducts.push(sku);
+    logger.store('vitacost', 'info', `❌ FAILED PRODUCT: ${sku} - Added to problematic list`);
+  }
+
+  /**
+   * Process a single product
+   * @param {Object} product - Product data from database
+   * @returns {Object} Processing result
+   */
+  async processProduct(product) {
+    const { sku, sku2 } = product;
+    if (!sku) {
+      logger.store('vitacost', 'warn', 'Skipping product with empty SKU.');
+      return { status: 'failed', message: 'Empty SKU' };
+    }
+    
+    try {
+      // Fetch fresh data from API using sku (not sku2!)
+      const apiData = await this._fetchProductData(sku);
+      
+      // Check if API returned error
+      if (!apiData || apiData.success === false) {
+        logger.store('vitacost', 'warn', `Product ${sku} - API error or invalid response`);
+        
+        // Mark as problematic using sku2
+        await this.markProductAsProblematic(sku);
+        
+        return { status: 'failed', message: 'API error or product unavailable' };
+      }
+      
+      // Transform and update product
+      const transformedData = this._transformProductData(apiData, sku);
+      const updateResult = await this.updateProductInDb({
+        sku2: sku2,
+        currentData: product,
+        newData: transformedData
+      });
+      
+      return updateResult; // Return the actual status from updateProductInDb
+      
+    } catch (error) {
+      logger.store('vitacost', 'error', `Error processing product ${sku}: ${error.message}`);
+      this.problematicProducts.push(sku);
+      return { status: 'failed', message: error.message };
+    }
+  }
+
+  /**
+   * Update product in database with detailed change tracking
+   * @private
+   */
+  async updateProductInDb({ sku2, currentData, newData }) {
+    const changes = [];
+    let hasChanges = false;
+    
+    // Compare and track price changes
+    const oldPrice = parseFloat(currentData.supplier_price) || 0;
+    const newPrice = parseFloat(newData.price) || 0;
+    if (oldPrice !== newPrice) {
+      changes.push(`  price: $${oldPrice.toFixed(2)} → $${newPrice.toFixed(2)}`);
+      hasChanges = true;
+      this.updateStats.priceChanges++;
+    }
+    
+    // Compare and track quantity changes
+    const oldQuantity = parseInt(currentData.quantity) || 0;
+    const newQuantity = parseInt(newData.quantity) || 0;
+    if (oldQuantity !== newQuantity) {
+      changes.push(`  quantity: ${oldQuantity} → ${newQuantity}`);
+      hasChanges = true;
+      this.updateStats.quantityChanges++;
+    }
+    
+    // Compare and track availability changes
+    const oldAvailability = currentData.availability || 'outOfStock';
+    const newAvailability = newData.availability || 'outOfStock';
+    if (oldAvailability !== newAvailability) {
+      changes.push(`  availability: ${oldAvailability} → ${newAvailability}`);
+      hasChanges = true;
+      this.updateStats.availabilityChanges++;
+    }
+    
+    // Compare and track brand changes
+    const oldBrand = currentData.brand || '';
+    const newBrand = newData.brand || '';
+    if (oldBrand !== newBrand) {
+      changes.push(`  brand: "${oldBrand}" → "${newBrand}"`);
+      hasChanges = true;
+      this.updateStats.brandChanges++;
+    }
+    
+    // Calculate handling time for comparison
+    let handlingTimeAmz = newData.vitacostHandlingTime + newData.omdHandlingTime;
+    if (handlingTimeAmz > 29) {
+      handlingTimeAmz = 29;
+    }
+    
+    // Compare and track handling time changes
+    const oldHandlingTime = parseInt(currentData.handling_time_amz) || 0;
+    const newHandlingTime = handlingTimeAmz;
+    if (oldHandlingTime !== newHandlingTime) {
+      changes.push(`  handling_time: ${oldHandlingTime} → ${newHandlingTime}`);
+      hasChanges = true;
+      this.updateStats.handlingTimeChanges++;
+    }
+    
+    if (hasChanges) {
+      // Status icon based on changes type
+      let statusIcon = '✅'; // Success update
+      if (newData.availability === 'outOfStock' && oldAvailability === 'inStock') {
+        statusIcon = '⭕'; // Out of stock
+      } else if (newData.availability === 'inStock' && oldAvailability === 'outOfStock') {
+        statusIcon = '🔄'; // Back in stock
+      }
+      
+      logger.info(`${statusIcon} Product ${sku2} updated with changes:`);
+      logger.info(changes.join('\n'));
+      
+      if (handlingTimeAmz > 29) {
+        logger.store('vitacost', 'warn', 
+          `⚠️ Handling time for ${sku2} exceeds maximum: ${newData.vitacostHandlingTime + newData.omdHandlingTime} days. Limited to 29 days.`
+        );
+      }
+      
+      // Update database
+      const updateQuery = `
+        UPDATE produtos 
+        SET 
+          supplier_price = $1,
+          quantity = $2,
+          availability = $3,
+          brand = $4,
+          lead_time = $5,
+          lead_time_2 = $6,
+          handling_time_amz = $7,
+          atualizado = $8,
+          last_update = NOW()
+        WHERE sku2 = $9 AND source = 'Vitacost'
+      `;
+      
+      await this.dbService.executeWithRetry(updateQuery, [
+        newData.price,
+        newData.quantity,
+        newData.availability,
+        newData.brand,
+        newData.omdHandlingTime.toString(),
+        newData.vitacostHandlingTime,
+        handlingTimeAmz,
+        this.updateFlagValue,
+        sku2
+      ]);
+      
+      this.updateStats.updatedProducts++;
+      return { status: 'updated', changes };
+    } else {
+      // No changes, just update last_update timestamp
+      await this.dbService.executeWithRetry(
+        `UPDATE produtos SET last_update = NOW() WHERE sku2 = $1 AND source = 'Vitacost'`,
+        [sku2]
+      );
+      return { status: 'no_changes' };
     }
   }
 
@@ -533,13 +768,13 @@ Taxa: ${requestsPerSecondRate.toFixed(2)} produtos/s | Em estoque: ${this.inStoc
    * @returns {Promise<Object>} Result of Phase 2 operations
    */
   async executePhase2(batchSize, checkInterval, checkCancellation, updateProgress) {
-    logger.info(`Running Phase 2 for ${this.getName()} provider`);
+    logger.store('vitacost', 'info', `Running Phase 2 for ${this.getName()} provider`);
     
     // IMPORTANTE: Forçar o tamanho do batch para 9990 sempre, independente do valor passado
     // Isso garante compatibilidade com as regras da Amazon SP-API
     const fixedBatchSize = 9990;
     if (batchSize !== fixedBatchSize) {
-      logger.info(`Adjusting batch size from ${batchSize} to fixed value of ${fixedBatchSize} for Amazon compatibility`);
+      logger.store('vitacost', 'info', `Adjusting batch size from ${batchSize} to fixed value of ${fixedBatchSize} for Amazon compatibility`);
       batchSize = fixedBatchSize;
     }
     
@@ -568,12 +803,12 @@ Taxa: ${requestsPerSecondRate.toFixed(2)} produtos/s | Em estoque: ${this.inStoc
         reportJson: updateProgress && updateProgress.reportJson ? updateProgress.reportJson : null
       };
     } catch (error) {
-      logger.error(`Error in ${this.getName()} Phase 2: ${error.message}`, { error });
+      logger.store('vitacost', 'error', `Error in ${this.getName()} Phase 2: ${error.message}`, { error });
       throw error;
     } finally {
       // Garantir que a conexão com o banco de dados seja fechada
       await this.close();
-      logger.info(`Database connection closed after Phase 2 for ${this.getName()}`);
+      logger.store('vitacost', 'info', `Database connection closed after Phase 2 for ${this.getName()}`);
     }
   }
 
@@ -648,15 +883,15 @@ Taxa: ${requestsPerSecondRate.toFixed(2)} produtos/s | Em estoque: ${this.inStoc
       const query = this.getPhase2Queries().resetUpdatedProducts;
       const result = await this.dbService.executeWithRetry(query);
       
-      logger.info(`Reset updated status for ${result.affectedRows || 0} ${this.getName()} products`);
+      logger.store('vitacost', 'info', `Reset updated status for ${result.affectedRows || 0} ${this.getName()} products`);
       return result;
     } catch (error) {
-      logger.error(`Error resetting updated products for ${this.getName()}: ${error.message}`, { error });
+      logger.store('vitacost', 'error', `Error resetting updated products for ${this.getName()}: ${error.message}`, { error });
       throw error;
     } finally {
       // Garantir que a conexão com o banco de dados seja fechada
       await this.close();
-      logger.info(`Database connection closed after resetting updated products for ${this.getName()}`);
+      logger.store('vitacost', 'info', `Database connection closed after resetting updated products for ${this.getName()}`);
     }
   }
 }

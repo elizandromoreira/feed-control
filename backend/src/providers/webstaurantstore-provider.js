@@ -9,6 +9,7 @@ const BaseProvider = require('./provider-interface');
 const DatabaseService = require('../services/database');
 const { DB_CONFIG } = require('../config/db');
 const logger = require('../config/logging')();
+const SimpleQueue = require('../utils/SimpleQueue');
 const axios = require('axios');
 const retry = require('async-retry');
 
@@ -24,48 +25,35 @@ class WebstaurantstoreProvider extends BaseProvider {
     this.apiBaseUrl = config.apiBaseUrl || process.env.WEBSTAURANTSTORE_API_BASE_URL || 'http://167.114.223.83:3005/wr/api';
     this.dbService = new DatabaseService(DB_CONFIG);
     
-    // Debug das variáveis de ambiente no construtor
-    logger.info('=== DEBUG WebstaurantstoreProvider constructor ===');
-    logger.info(`WEBSTAURANTSTORE_STOCK_LEVEL (env): ${process.env.WEBSTAURANTSTORE_STOCK_LEVEL}`);
-    logger.info(`WEBSTAURANTSTORE_BATCH_SIZE (env): ${process.env.WEBSTAURANTSTORE_BATCH_SIZE}`);
-    logger.info(`WEBSTAURANTSTORE_REQUESTS_PER_SECOND (env): ${process.env.WEBSTAURANTSTORE_REQUESTS_PER_SECOND}`);
-    logger.info(`WEBSTAURANTSTORE_HANDLING_TIME (env): ${process.env.WEBSTAURANTSTORE_HANDLING_TIME}`);
-    logger.info(`WEBSTAURANTSTORE_HANDLING_TIME_OMD (env): ${process.env.WEBSTAURANTSTORE_HANDLING_TIME_OMD}`);
-    logger.info(`WEBSTAURANTSTORE_UPDATE_FLAG_VALUE (env): ${process.env.WEBSTAURANTSTORE_UPDATE_FLAG_VALUE}`);
-    logger.info(`LEAD_TIME_OMD (global env): ${process.env.LEAD_TIME_OMD}`);
+    // Use values from store_configurations (passed via config) instead of hardcoded .env
+    this.stockLevel = config.stockLevel ?? 32; // Default 32 if not provided
+    this.handlingTimeOmd = config.handlingTimeOmd ?? 1; // OMD handling time
+    this.webstaurantstoreHandlingTime = config.providerSpecificHandlingTime ?? 3; // Provider specific handling time
+    this.updateFlagValue = config.updateFlagValue ?? 5; // Update flag value
+    this.requestsPerSecond = config.requestsPerSecond ?? 1; // Requests per second from store_configurations
     
-    // Usar prioritariamente as variáveis específicas do provider, com fallback para variáveis genéricas
-    this.stockLevel = parseInt(process.env.WEBSTAURANTSTORE_STOCK_LEVEL || process.env.STOCK_LEVEL || '32', 10);
-    this.batchSize = parseInt(process.env.WEBSTAURANTSTORE_BATCH_SIZE || process.env.BATCH_SIZE || '240', 10);
-    this.handlingTimeOmd = parseInt(process.env.WEBSTAURANTSTORE_HANDLING_TIME_OMD || process.env.LEAD_TIME_OMD || '2', 10);
-    this.webstaurantstoreHandlingTime = parseInt(process.env.WEBSTAURANTSTORE_HANDLING_TIME || '3', 10);
-    this.requestsPerSecond = parseInt(process.env.WEBSTAURANTSTORE_REQUESTS_PER_SECOND || process.env.REQUESTS_PER_SECOND || '1', 10);
-    this.updateFlagValue = parseInt(process.env.WEBSTAURANTSTORE_UPDATE_FLAG_VALUE || '5', 10);
+    // Log configuration values from store_configurations
+    logger.info('WebstaurantStore Provider initialized with store_configurations:');
+    logger.info(`- API Base URL: ${this.apiBaseUrl}`);
+    logger.info(`- Stock Level: ${this.stockLevel}`);
+    logger.info(`- Handling Time OMD: ${this.handlingTimeOmd}`);
+    logger.info(`- Handling Time WebstaurantStore: ${this.webstaurantstoreHandlingTime}`);
+    logger.info(`- Requests Per Second: ${this.requestsPerSecond}`);
+    logger.info(`- Update Flag Value: ${this.updateFlagValue}`);
     
-    // Debug dos valores após parse
-    logger.info('Valores utilizados após parsear:');
-    logger.info(`- stockLevel: ${this.stockLevel}`);
-    logger.info(`- batchSize: ${this.batchSize}`);
-    logger.info(`- handlingTimeOmd: ${this.handlingTimeOmd}`);
-    logger.info(`- webstaurantstoreHandlingTime: ${this.webstaurantstoreHandlingTime}`);
-    logger.info(`- requestsPerSecond: ${this.requestsPerSecond}`);
-    logger.info(`- updateFlagValue: ${this.updateFlagValue}`);
-    logger.info('==============================');
-    
-    // Contadores para estatísticas
-    this.inStockCount = 0;
-    this.outOfStockCount = 0;
-    this.retryCount = 0;
     this.dbInitialized = false;
     
-    // Log configuration
-    logger.info(`Webstaurantstore Provider initialized with:`);
-    logger.info(`API Base URL: ${this.apiBaseUrl}`);
-    logger.info(`Stock Level: ${this.stockLevel}`);
-    logger.info(`Handling Time OMD: ${this.handlingTimeOmd}`);
-    logger.info(`Handling Time Webstaurantstore: ${this.webstaurantstoreHandlingTime}`);
-    logger.info(`Requests Per Second: ${this.requestsPerSecond}`);
-    logger.info(`Update Flag Value: ${this.updateFlagValue}`);
+    // Array to track problematic products for batch update
+    this.problematicProducts = [];
+    
+    // Use Sets to track unique stock counts
+    this.inStockSet = new Set();
+    this.outOfStockSet = new Set();
+    
+    // Counters for statistics
+    this.retryCount = 0;
+    this.inStockCount = 0;
+    this.outOfStockCount = 0;
   }
 
   /**
@@ -210,9 +198,9 @@ class WebstaurantstoreProvider extends BaseProvider {
     }
     
     if (isAvailable) {
-      this.inStockCount++;
+      this.inStockSet.add(sku);
     } else {
-      this.outOfStockCount++;
+      this.outOfStockSet.add(sku);
     }
     
     // Lógica de preços: priorizar Member Price, se for 0 usar Price
@@ -272,9 +260,12 @@ class WebstaurantstoreProvider extends BaseProvider {
     
     try {
       // Reset contadores para estatísticas
-      this.inStockCount = 0;
-      this.outOfStockCount = 0;
+      this.inStockSet.clear();
+      this.outOfStockSet.clear();
       this.retryCount = 0;
+      this.problematicProducts = []; // Clear problematic products array
+      
+      logger.store('webstaurantstore', 'info', 'Starting Phase 1: Product synchronization');
       
       // 1. Get products from database
       const query = `
@@ -414,16 +405,19 @@ class WebstaurantstoreProvider extends BaseProvider {
             // Log update
             logger.info(`Updated product ${product.sku2} in database`);
             progress.updatedProducts++;
+            return 'updated';
+          } else {
+            // No changes needed
+            return 'no_changes';
           }
           
-          return true;
         } catch (error) {
           progress.errorCount++;
           
           // Se estamos pulando produtos problemáticos, apenas log
           if (skipProblematic) {
-            logger.warn(`Skipping problematic product ${product.sku}: ${error.message}`);
-            return false;
+            logger.store('webstaurantstore', 'warn', `❌ Skipping problematic product ${product.sku}: ${error.message}`);
+            return 'failed';
           }
           
           // Para erros específicos da API, marcar como fora de estoque mas continuar
@@ -431,7 +425,7 @@ class WebstaurantstoreProvider extends BaseProvider {
               error.message.includes('status code 404') || 
               error.message.includes('timeout')) {
             try {
-              logger.info(`Produto ${product.sku} com erro da API: Marcando como fora de estoque (quantity=0)`);
+              logger.store('webstaurantstore', 'info', `❌ Product ${product.sku} API error: Setting as out of stock (quantity=0)`);
               
               // Buscar produto atual para obter dados necessários
               const currentProduct = await this.dbService.fetchRowWithRetry(
@@ -472,67 +466,117 @@ class WebstaurantstoreProvider extends BaseProvider {
                   product.sku2
                 ]);
                 
-                logger.info(`Produto ${product.sku} marcado como fora de estoque após erro da API`);
+                logger.store('webstaurantstore', 'info', `Product ${product.sku} marked as out of stock after API error`);
+                this.outOfStockSet.add(product.sku2);
               }
               
-              return false;
+              // Marcar produto como problemático
+              this.markProductAsProblematic(product.sku, error.message);
+              return 'failed';
             } catch (updateError) {
-              logger.error(`Erro ao marcar produto ${product.sku} como fora de estoque: ${updateError.message}`);
-              return false;
+              logger.store('webstaurantstore', 'error', `❌ Error marking product ${product.sku} as out of stock: ${updateError.message}`);
+              this.markProductAsProblematic(product.sku, updateError.message);
+              return 'failed';
             }
           }
           
-          throw error; // Para outros tipos de erros, repassamos para tratamento externo
+          // Marcar produto como problemático
+          this.markProductAsProblematic(product.sku, error.message);
+          logger.store('webstaurantstore', 'error', `❌ Error processing product ${product.sku}: ${error.message}`);
+          return 'failed';
         }
       };
       
-      // Processamento em lotes, respeitando o número máximo de requisições por segundo
-      const batchSize = rateLimit * 2; // Tamanho do lote como múltiplo do rate limit
+      // Use SimpleQueue for RPS-based processing like other providers
+      const concurrency = rateLimit || this.requestsPerSecond;
+      const queue = new SimpleQueue({ concurrency });
+      logger.info(`Using SimpleQueue with concurrency: ${concurrency} req/s`);
       
-      // Processa produtos em lotes
-      for (let i = 0; i < products.length; i += batchSize) {
-        // Check if the process should be cancelled before each batch
-        if (checkCancellation && checkCancellation()) {
-          logger.info('Phase 1 cancelled by user');
-          return {
-            success: false,
-            message: 'Operation cancelled by user',
-            inStockCount: this.inStockCount,
-            outOfStockCount: this.outOfStockCount,
-            totalProducts: progress.totalProducts,
-            processedProducts: progress.processedProducts,
-            updatedProducts: progress.updatedProducts,
-            errorCount: progress.errorCount,
-            retryCount: this.retryCount,
-            elapsedTime: Date.now() - startTime
-          };
-        }
-        
-        const batch = products.slice(i, i + batchSize);
-        logger.info(`Processando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(products.length/batchSize)} (${batch.length} produtos)`);
-        
-        // Processa o lote atual com limitação de concorrência
-        const promises = batch.map((product, index) => {
-          const delayMs = Math.floor(index / rateLimit) * 1000; // Agrupa requests por segundo
-          return new Promise(resolve => {
-            setTimeout(async () => {
-              try {
-                await processProduct(product);
-              } catch (error) {
-                logger.error(`Erro no processamento do produto ${product.sku}: ${error.message}`);
-              } finally {
-                progress.processedProducts++;
-                if (updateProgress) {
-                  updateProgress(progress);
-                }
-                resolve();
-              }
-            }, delayMs);
-          });
+      // Process all products through the queue
+      const promises = products.map(async (product) => {
+        return queue.add(async () => {
+          // Check cancellation inside queue processing
+          if (checkCancellation && checkCancellation()) {
+            logger.info('Cancelling remaining queue tasks');
+            queue.clear(); // Clear remaining tasks
+            throw new Error('Cancelled by user');
+          }
+          
+          try {
+            const status = await processProduct(product);
+            
+            // Update progress counters based on status
+            progress.processedProducts++;
+            if (status === 'updated') {
+              progress.updatedProducts++;
+            } else if (status === 'failed') {
+              progress.errorCount++;
+            }
+            
+            if (updateProgress) {
+              updateProgress(progress);
+            }
+            
+            return status;
+          } catch (error) {
+            progress.errorCount++;
+            progress.processedProducts++;
+            
+            if (updateProgress) {
+              updateProgress(progress);
+            }
+            
+            logger.store('webstaurantstore', 'error', `❌ Queue processing error for ${product.sku}: ${error.message}`);
+            return 'failed';
+          }
         });
-        
-        // Aguarda a conclusão de todo o lote
+      });
+      
+      // Track if operation was cancelled
+      let isCancelled = false;
+      
+      // Wait for all products to be processed
+      try {
         await Promise.all(promises);
+      } catch (error) {
+        if (error.message === 'Cancelled by user') {
+          logger.info('Phase 1 cancelled by user during queue processing');
+          isCancelled = true;
+        } else {
+          throw error;
+        }
+      }
+      
+      // Only do database operations if NOT cancelled
+      if (!isCancelled && this.problematicProducts.length > 0) {
+        try {
+          const updateQuery = `
+            UPDATE produtos 
+            SET sku_problem = 1, last_update = NOW()
+            WHERE sku2 = ANY($1) AND source = 'Webstaurantstore'
+          `;
+          
+          const result = await this.dbService.executeWithRetry(updateQuery, [this.problematicProducts]);
+          logger.store('webstaurantstore', 'info', `Batch updated ${result.rowCount} problematic products`);
+        } catch (error) {
+          logger.store('webstaurantstore', 'error', `Failed to batch update problematic products: ${error.message}`);
+        }
+      }
+      
+      // Return appropriate result based on cancellation status
+      if (isCancelled) {
+        return {
+          success: false,
+          message: 'Operation cancelled by user',
+          inStockCount: this.inStockSet.size,
+          outOfStockCount: this.outOfStockSet.size,
+          totalProducts: progress.totalProducts,
+          processedProducts: progress.processedProducts,
+          updatedProducts: progress.updatedProducts,
+          errorCount: progress.errorCount,
+          retryCount: this.retryCount,
+          elapsedTime: Date.now() - startTime
+        };
       }
       
       // 3. Return results
@@ -542,13 +586,16 @@ class WebstaurantstoreProvider extends BaseProvider {
       logger.info(`Phase 1 completed in ${elapsedTime}ms`);
       logger.info(`Processed ${progress.processedProducts} of ${progress.totalProducts} products`);
       logger.info(`Updated ${progress.updatedProducts} products`);
-      logger.info(`In stock: ${this.inStockCount}, Out of stock: ${this.outOfStockCount}`);
+      logger.info(`In stock: ${this.inStockSet.size}, Out of stock: ${this.outOfStockSet.size}`);
       logger.info(`Errors: ${progress.errorCount}, Retries: ${this.retryCount}`);
+      if (this.problematicProducts.length > 0) {
+        logger.info(`Problematic products (marked): ${this.problematicProducts.length}`);
+      }
       
       return {
         success: true,
-        inStockCount: this.inStockCount,
-        outOfStockCount: this.outOfStockCount,
+        inStockCount: this.inStockSet.size,
+        outOfStockCount: this.outOfStockSet.size,
         totalProducts: progress.totalProducts,
         processedProducts: progress.processedProducts,
         updatedProducts: progress.updatedProducts,
@@ -644,6 +691,12 @@ class WebstaurantstoreProvider extends BaseProvider {
     const result = await this.dbService.executeWithRetry(query);
     
     logger.info(`Reset updated products for ${this.getName()}: ${result.rowCount} rows affected`);
+  }
+
+  // Mark product as problematic (add to batch list)
+  markProductAsProblematic(sku, reason) {
+    this.problematicProducts.push(sku);
+    logger.store('webstaurantstore', 'warn', `❌ Product ${sku} marked as problematic: ${reason}`);
   }
 }
 

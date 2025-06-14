@@ -12,6 +12,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const DatabaseService = require('../services/database');
 const AmazonApiService = require('../services/amazonApi');
+const feedService = require('../services/feedService');
 const { DB_CONFIG } = require('../config/db');
 const logger = require('../config/logging')();
 const { validate } = require('jsonschema');
@@ -439,27 +440,22 @@ async function processAndDownloadFeedResults(feedId, feedDocument, accessToken, 
             
             // Extrair e mostrar informações importantes
             if (parsedContent.header) {
-              logger.info(`Feed Status: ${parsedContent.header.status || 'N/A'}`);
-              logger.info(`Seller ID: ${parsedContent.header.sellerId || 'N/A'}`);
-              logger.info(`Feed ID: ${parsedContent.header.feedId || feedId}`);
+              // Log condensado do header
+              logger.info(`Feed ${parsedContent.header.feedId || feedId} - Status: ${parsedContent.header.status || 'N/A'}`);
             }
             
             // Mostrar resumo de mensagens processadas, aceitas e erros
             if (parsedContent.summary) {
               const summary = parsedContent.summary;
-              logger.info('----- Feed Processing Summary -----');
-              logger.info(`Messages Processed: ${summary.messagesProcessed || 0}`);
-              logger.info(`Messages Accepted: ${summary.messagesAccepted || 0}`);
-              logger.info(`Messages Invalid: ${summary.messagesInvalid || 0}`);
-              logger.info(`Errors: ${summary.errors || 0}`);
-              logger.info(`Warnings: ${summary.warnings || 0}`);
-              logger.info('---------------------------------');
+              
+              // Log condensado do resumo
+              logger.info(`Feed Summary: Processed ${summary.messagesProcessed || 0} | Accepted ${summary.messagesAccepted || 0} | Invalid ${summary.messagesInvalid || 0} | Errors ${summary.errors || 0} | Warnings ${summary.warnings || 0}`);
               
               // Indicar claramente o resultado do processamento
               if (summary.messagesAccepted > 0) {
-                logger.info(`✓ SUCESSO: Amazon aceitou ${summary.messagesAccepted} de ${summary.messagesProcessed} produtos!`);
+                logger.info(`✓ SUCCESS: Amazon accepted ${summary.messagesAccepted} of ${summary.messagesProcessed} products`);
               } else {
-                logger.error(`✗ FALHA: Amazon não aceitou nenhum produto. Verifique os erros acima.`);
+                logger.error(`✗ FAILURE: Amazon did not accept any products. Check errors above.`);
               }
             }
             
@@ -529,9 +525,9 @@ async function processAndDownloadFeedResults(feedId, feedDocument, accessToken, 
             
             // Indicar claramente o resultado do processamento
             if (messagesAccepted > 0) {
-              logger.info(`✓ SUCESSO: Amazon aceitou ${messagesAccepted} de ${messagesProcessed} produtos!`);
+              logger.info(`✓ SUCCESS: Amazon accepted ${messagesAccepted} of ${messagesProcessed} products!`);
             } else {
-              logger.error(`✗ FALHA: Amazon não aceitou nenhum produto. Verifique os erros acima.`);
+              logger.error(`✗ FAILURE: Amazon did not accept any products. Check errors above.`);
             }
             
             // Extrair erros específicos se houver
@@ -831,6 +827,21 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
           // Salvar feed localmente
           const feedPath = await saveFeedLocally(feed);
           
+          // Salvar feed JSON na tabela amazon_feeds
+          try {
+            await feedService.saveFeed(
+              feed,                    // feedData - JSON do feed
+              'inventory',             // feedType - tipo do feed
+              null,                    // feedId - será preenchido após envio para Amazon
+              'amazon',                // storeId - identificador da loja
+              feedPath                 // filePath - caminho do arquivo local
+            );
+            logger.info(`Feed JSON saved to database for batch ${i + 1}`);
+          } catch (saveError) {
+            logger.error(`Error saving feed to database for batch ${i + 1}: ${saveError.message}`);
+            // Continuar mesmo com erro de salvamento, pois o feed ainda será enviado
+          }
+          
           // Atualizar progresso
           if (updateProgress) {
             updateProgress({
@@ -871,6 +882,18 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
             amazonApi.credentials.marketplace_id
           );
           
+          // Atualizar o registro na tabela amazon_feeds com o feedId da Amazon
+          try {
+            // Como não temos o ID do registro criado anteriormente, vamos buscar o mais recente
+            // e atualizar com o feedId da Amazon
+            const result = await feedService.updateLatestFeedWithId(feedId, 'amazon');
+            if (result) {
+              logger.info(`Feed record updated with Amazon feedId: ${feedId}`);
+            }
+          } catch (updateError) {
+            logger.error(`Error updating feed record with feedId: ${updateError.message}`);
+          }
+          
           // Verificar status do feed a cada 30 segundos até que seja DONE
           logger.info(`Feed submitted: ${feedId}`);
           logger.info(`Waiting for feed processing. Will check status every ${checkInterval/1000} seconds...`);
@@ -889,6 +912,7 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
           let feedProcessed = false;
           let feedStatus = null;
           let waitCount = 0;
+          let lastFeedStatus = null;
           
           while (!feedProcessed) {
             // Verificar se a sincronização foi cancelada
@@ -898,7 +922,6 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
             }
             
             // Aguardar 30 segundos antes de verificar o status
-            logger.info(`Waiting ${checkInterval/1000} seconds before checking feed status...`);
             
             // Atualizar progresso com informações de espera
             if (updateProgress) {
@@ -939,11 +962,18 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
             
             // Verificar se feedStatus é um objeto e tem a propriedade processingStatus
             if (feedStatus && typeof feedStatus === 'object' && feedStatus.processingStatus) {
-              logger.info(`Feed ${feedId} status: ${feedStatus.processingStatus} (attempt ${waitCount}/${20})`);
+              // Só loga mudanças de status ou a cada 5 tentativas
+              const statusChanged = feedStatus.processingStatus !== lastFeedStatus;
+              const shouldLogStatus = statusChanged || waitCount === 1 || waitCount % 5 === 0;
+              
+              if (shouldLogStatus) {
+                logger.info(`Feed ${feedId} status: ${feedStatus.processingStatus} (check ${waitCount})`);
+                lastFeedStatus = feedStatus.processingStatus;
+              }
               
               if (feedStatus.processingStatus === 'DONE') {
                 feedProcessed = true;
-                logger.info(`Feed ${feedId} processed successfully`);
+                logger.info(`Feed ${feedId} completed successfully`);
                 
                 // Atualizar progresso
                 if (updateProgress) {
@@ -989,6 +1019,22 @@ async function mainPhase2(batchSize, checkInterval, checkCancellation, updatePro
                     });
                   }
                 } else {
+                  // Salvar resultados do processamento na tabela amazon_feeds se disponível
+                  if (resultsProcessed.success && resultsProcessed.reportJson) {
+                    try {
+                      await feedService.saveFeed(
+                        resultsProcessed.reportJson,  // feedData - JSON do resultado
+                        'result',                     // feedType - tipo resultado
+                        feedId,                      // feedId - mesmo ID do feed original
+                        'amazon',                    // storeId - identificador da loja
+                        null                         // filePath - não há arquivo local para resultados
+                      );
+                      logger.info(`Feed results saved to database for feedId: ${feedId}`);
+                    } catch (saveError) {
+                      logger.error(`Error saving feed results to database: ${saveError.message}`);
+                    }
+                  }
+                  
                   // Batch processada com sucesso
                   totalProcessed += batch.length;
                   

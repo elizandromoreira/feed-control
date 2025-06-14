@@ -52,6 +52,9 @@ async function syncStoreWithProvider(
 
     provider = providerFactory.getProvider(providerId, storeConfig);
     
+    // Initialize the provider's database connection
+    await provider.init();
+    
     logger.info(`Usando provider ${provider.getName()} para a loja ${storeName}`);
     
     if (checkCancellation && checkCancellation()) {
