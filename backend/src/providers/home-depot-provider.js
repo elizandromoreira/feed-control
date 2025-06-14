@@ -45,6 +45,7 @@ class HomeDepotProvider extends BaseProvider {
         this.emptyDataSkus = [];
         this.problematicProducts = [];
         this.failedProducts = [];
+        this.products404ForRetry = new Map(); // Produtos com erro 404 para retry no final
         this.processedCount = 0;
         this.inStockSet = new Set();
         this.outOfStockSet = new Set();
@@ -214,9 +215,9 @@ class HomeDepotProvider extends BaseProvider {
             if (error.response) {
                 // Verificar se é erro 404 (produto não encontrado)
                 if (error.response.status === 404) {
-                    logger.store(this.storeName, 'warn', `[REQ-${requestId}] PRODUCT NOT FOUND - SKU ${sku}: HTTP 404, Duration: ${duration}ms`);
-                    responseData = { productNotFound: true, sku };
-                    errorOccurred = null; // Limpar erro pois foi tratado
+                    logger.store(this.storeName, 'warn', `[REQ-${requestId}] HTTP 404 - SKU ${sku}: Duration: ${duration}ms (marked for retry later)`);
+                    responseData = { http404: true, sku }; // Marcar como 404 para retry posterior
+                    errorOccurred = null; // Limpar erro para não fazer retry imediato
                 } else {
                     logger.store(this.storeName, 'error', `[REQ-${requestId}] HTTP ERROR - SKU ${sku}: Status ${error.response.status}, Duration: ${duration}ms`);
                 }
@@ -245,6 +246,16 @@ class HomeDepotProvider extends BaseProvider {
                 async () => {
                     const result = await this.fetchProductData(sku);
                     
+                    // Se recebeu erro 404, marcar para retry posterior
+                    if (result && result.http404) {
+                        logger.store(this.storeName, 'info', `[${sku}] HTTP 404 received, marking for retry later`);
+                        const error = new Error('HTTP 404 - marked for retry');
+                        error.bail = true; // Para o retry imediato
+                        error.http404 = true;
+                        error.sku = sku;
+                        throw error;
+                    }
+                    
                     // Se o produto não foi encontrado, não precisa retry
                     if (result && result.productNotFound) {
                         logger.store(this.storeName, 'info', `[${sku}] Product marked as not found, stopping retries`);
@@ -258,7 +269,7 @@ class HomeDepotProvider extends BaseProvider {
                     
                     // Se não há resultado, forçar retry
                     if (!result) {
-                        logger.store(this.storeName, 'warn', `[${sku}] No data returned from API, will retry`);
+                        logger.store(this.storeName, 'warn', `🔄 [${sku}] No data returned from API, will RETRY`);
                         throw new Error('No data returned from API');
                     }
                     
@@ -266,12 +277,12 @@ class HomeDepotProvider extends BaseProvider {
                     return await this.mapApiDataToProductData(result, sku);
                 },
                 {
-                    retries: 2,
+                    retries: 2, // Mantém retry para outros erros (não 404)
                     factor: 2,
-                    minTimeout: 500,  // Reduzido de 2000ms para 500ms
-                    maxTimeout: 1000, // Reduzido de 5000ms para 1000ms
+                    minTimeout: 500,
+                    maxTimeout: 1000,
                     onRetry: (error, attempt) => {
-                        logger.store(this.storeName, 'warn', `[${sku}] Retry attempt ${attempt}/2 - Error: ${error.message}`);
+                        logger.store(this.storeName, 'warn', `🔄 [${sku}] RETRY attempt ${attempt}/2 - Error: ${error.message}`);
                     }
                 }
             );
@@ -279,13 +290,19 @@ class HomeDepotProvider extends BaseProvider {
             return result;
             
         } catch (error) {
+            // Se foi erro 404, marcar para retry posterior
+            if (error.http404 || (error.bail && error.message === 'HTTP 404 - marked for retry')) {
+                logger.store(this.storeName, 'info', `[${sku}] HTTP 404 - adding to retry queue for later processing`);
+                return { http404ForRetry: true, sku };
+            }
+            
             // Se foi um erro de produto não encontrado, retornar status apropriado
             if (error.productNotFound || (error.bail && error.message === 'Product not found')) {
                 logger.store(this.storeName, 'info', `[${sku}] Product not found, returning not found status`);
                 return await this.mapApiDataToProductData({ productNotFound: true, sku }, sku);
             }
             
-            logger.store(this.storeName, 'error', `[${sku}] Failed to fetch product data after 2 attempts: ❌ ${error.message}`);
+            logger.store(this.storeName, 'error', `[${sku}] Failed to fetch product data after retries: ❌ ${error.message}`);
             logger.store(this.storeName, 'error', `❌ FAILED PRODUCT: ${sku} - Failed after all retries: ${error.message}`);
             
             // Retornar objeto de erro ao invés de marcar como productNotFound
@@ -419,6 +436,13 @@ class HomeDepotProvider extends BaseProvider {
             const productData = await this.fetchProductDataWithRetry(product.sku);
             const apiDuration = Date.now() - apiStartTime;
             logger.store(this.storeName, 'debug', `[${product.sku}] API fetch took ${apiDuration}ms`);
+            
+            // Verificar se produto foi marcado para retry 404
+            if (productData.http404ForRetry) {
+                logger.store(this.storeName, 'info', `[${product.sku}] Marked for 404 retry - adding to retry queue`);
+                this.products404ForRetry.set(product.sku, product);
+                return { status: 'retry_later', message: 'HTTP 404 - will retry later' };
+            }
             
             // Verificar se há erro nos dados retornados
             if (productData.error || !productData) {
@@ -602,6 +626,242 @@ class HomeDepotProvider extends BaseProvider {
         }
     }
 
+    async process404Retries() {
+        if (this.products404ForRetry.size === 0) {
+            logger.store(this.storeName, 'info', 'No products with 404 errors to retry');
+            return { processed: 0, success: 0, failed: 0 };
+        }
+
+        logger.store(this.storeName, 'info', `🔄 Processing ${this.products404ForRetry.size} products with 404 errors for RETRY (parallel processing)`);
+        
+        let processed = 0;
+        let success = 0;
+        let failed = 0;
+
+        // Usar a mesma fila paralela do processamento principal
+        const SimpleQueue = require('p-queue').default;
+        const queue = new SimpleQueue({ concurrency: 5 }); // Mesma concorrência
+        
+        const promises = [];
+
+        for (const [sku, product] of this.products404ForRetry) {
+            const promise = queue.add(async () => {
+                try {
+                    logger.store(this.storeName, 'info', `🔄 [${sku}] RETRY attempt for HTTP 404 product`);
+                    
+                    // Fazer apenas 1 chamada direta à API (sem retry automático)
+                    const apiData = await this.fetchProductData(sku);
+                    
+                    if (apiData && !apiData.http404 && !apiData.productNotFound) {
+                        // Sucesso! Processar o produto normalmente
+                        const productData = await this.mapApiDataToProductData(apiData, sku);
+                        
+                        // Simular o processamento normal do produto
+                        const tempProduct = { sku };
+                        const result = await this.updateProductInDbDirect(tempProduct, productData);
+                        
+                        if (result.status === 'updated' || result.status === 'no_changes') {
+                            logger.store(this.storeName, 'info', `✅ [${sku}] RETRY successful - product updated`);
+                            return { status: 'success', sku };
+                        } else {
+                            logger.store(this.storeName, 'warn', `⚠️ [${sku}] RETRY failed during update: ${result.message}`);
+                            return { status: 'failed', sku };
+                        }
+                    } else {
+                        // Ainda com erro 404 - marcar como produto não encontrado
+                        logger.store(this.storeName, 'warn', `❌ [${sku}] RETRY still returns 404 - marking as product not found`);
+                        this.problematicProducts.push(sku);
+                        return { status: 'failed', sku };
+                    }
+                    
+                } catch (error) {
+                    logger.store(this.storeName, 'error', `❌ [${sku}] RETRY failed with error: ${error.message}`);
+                    this.problematicProducts.push(sku);
+                    return { status: 'failed', sku, error: error.message };
+                }
+            });
+            
+            promises.push(promise);
+        }
+
+        // Aguardar todas as promessas em paralelo
+        const results = await Promise.all(promises);
+        
+        // Contabilizar resultados
+        for (const result of results) {
+            processed++;
+            if (result.status === 'success') {
+                success++;
+            } else {
+                failed++;
+            }
+        }
+
+        logger.store(this.storeName, 'info', `🔄 404 RETRY Summary: ${processed} processed, ${success} success, ${failed} failed (parallel execution)`);
+        
+        // Limpar a lista de retries
+        this.products404ForRetry.clear();
+        
+        return { processed, success, failed };
+    }
+
+    async updateProductInDbDirect(product, productData) {
+        // Versão simplificada do updateProductInDb que recebe os dados já processados
+        try {
+            // Buscar dados atuais do banco
+            const currentQuery = 'SELECT supplier_price, quantity, availability, brand, lead_time, lead_time_2, handling_time_amz, freight_cost FROM produtos WHERE sku = $1';
+            const currentResult = await this.dbService.executeWithRetry(currentQuery, [product.sku]);
+            
+            if (currentResult.rows.length === 0) {
+                logger.store(this.storeName, 'warn', `Product ${productData.sku} not found in DB. Skipping update.`);
+                return { status: 'failed', message: 'Product not found in database' };
+            }
+            
+            const { quantity, availability } = this.calculateQuantity(productData.stock, productData.available, productData.sku, productData.price);
+            const correctedAvailability = quantity > 0 ? 'inStock' : 'outOfStock';
+
+            // Add to appropriate set
+            if (correctedAvailability === 'inStock') {
+                this.inStockSet.add(product.sku);
+            } else {
+                this.outOfStockSet.add(product.sku);
+            }
+
+            const homeDepotLeadTime = this.calculateDeliveryTime(productData.min_delivery_date, productData.max_delivery_date, productData.sku);
+            
+            let handlingTimeAmz = this.handlingTimeOmd + homeDepotLeadTime;
+            if (handlingTimeAmz > 29) {
+                handlingTimeAmz = 29;
+            }
+            
+            const currentProduct = currentResult.rows[0];
+            
+            // Construct new data object
+            const newData = {
+                supplier_price: productData.price || 0,
+                quantity: quantity,
+                availability: correctedAvailability,
+                brand: productData.brand || '',
+                lead_time: this.handlingTimeOmd,
+                lead_time_2: homeDepotLeadTime,
+                handling_time_amz: handlingTimeAmz,
+                freight_cost: 0,
+                last_update: new Date().toISOString(),
+                atualizado: this.updateFlagValue,
+                sku_problem: false
+            };
+            
+            // Check for changes and count them
+            let hasChanges = false;
+            const changes = [];
+            
+            Object.keys(newData).forEach(key => {
+                if (key === 'last_update' || key === 'atualizado') return;
+                
+                const oldValue = currentProduct[key];
+                const newValue = newData[key];
+                
+                // Comparar valores apropriadamente baseado no tipo de campo
+                let hasRealChange = false;
+                let displayOldValue = oldValue;
+                let displayNewValue = newValue;
+                
+                if (key === 'supplier_price' || key === 'freight_cost') {
+                    // Comparar valores monetários como float
+                    const oldFloat = parseFloat(oldValue) || 0;
+                    const newFloat = parseFloat(newValue) || 0;
+                    hasRealChange = oldFloat !== newFloat;
+                    displayOldValue = `$${oldFloat}`;
+                    displayNewValue = `$${newFloat}`;
+                } else if (key === 'quantity' || key === 'lead_time' || key === 'lead_time_2' || key === 'handling_time_amz') {
+                    // Comparar valores inteiros
+                    const oldInt = parseInt(oldValue) || 0;
+                    const newInt = parseInt(newValue) || 0;
+                    hasRealChange = oldInt !== newInt;
+                    displayOldValue = oldInt;
+                    displayNewValue = newInt;
+                } else if (key === 'sku_problem') {
+                    // Comparar valores booleanos
+                    const oldBool = Boolean(oldValue);
+                    const newBool = Boolean(newValue);
+                    hasRealChange = oldBool !== newBool;
+                } else {
+                    // Comparar como string (brand, availability, etc.)
+                    hasRealChange = String(oldValue) !== String(newValue);
+                }
+                
+                if (hasRealChange) {
+                    hasChanges = true;
+                    changes.push(`${key}: ${displayOldValue} → ${displayNewValue}`);
+                    
+                    // Count specific types of changes
+                    if (key === 'supplier_price') this.updateStats.priceChanges++;
+                    if (key === 'quantity') this.updateStats.quantityChanges++;
+                    if (key === 'availability') this.updateStats.availabilityChanges++;
+                    if (key === 'brand') this.updateStats.brandChanges++;
+                    if (key === 'lead_time_2') this.updateStats.handlingTimeChanges++;
+                }
+            });
+            
+            if (hasChanges) {
+                this.updateStats.totalUpdates++;
+                
+                // Update the product in the database
+                const updateQuery = `
+                    UPDATE produtos 
+                    SET supplier_price = $1, quantity = $2, availability = $3, brand = $4,
+                        lead_time = $5, lead_time_2 = $6, handling_time_amz = $7,
+                        freight_cost = $8,
+                        last_update = $9, atualizado = $10, sku_problem = $11
+                    WHERE sku = $12
+                `;
+                
+                await this.dbService.executeWithRetry(updateQuery, [
+                    newData.supplier_price,
+                    newData.quantity,
+                    newData.availability,
+                    newData.brand,
+                    newData.lead_time,
+                    newData.lead_time_2,
+                    newData.handling_time_amz,
+                    newData.freight_cost,
+                    newData.last_update,
+                    newData.atualizado,
+                    newData.sku_problem,
+                    product.sku
+                ]);
+                
+                const statusIcon = correctedAvailability === 'inStock' ? '✅' : '⭕';
+                logger.store(this.storeName, 'info', `${statusIcon} Updated ${product.sku}: ${changes.join(', ')}`);
+                
+                return { status: 'updated', changes: changes.length, details: changes };
+            } else {
+                // No changes needed - but mark as processed successfully
+                const updateQuery = `
+                    UPDATE produtos 
+                    SET last_update = $1, atualizado = $2, sku_problem = false, lead_time_2 = $4, handling_time_amz = $5
+                    WHERE sku = $3
+                `;
+                
+                await this.dbService.executeWithRetry(updateQuery, [
+                    new Date().toISOString(),
+                    this.updateFlagValue,
+                    product.sku,
+                    homeDepotLeadTime,
+                    handlingTimeAmz
+                ]);
+                
+                const statusIcon = correctedAvailability === 'inStock' ? '✅' : '⭕';
+                logger.store(this.storeName, 'debug', `${statusIcon} No changes for ${product.sku} - marked as processed`);
+                return { status: 'no_changes' };
+            }
+            
+        } catch (error) {
+            logger.store(this.storeName, 'error', `Error updating product ${product.sku}: ❌ ${error.message}`);
+            return { status: 'failed', message: error.message };
+        }
+    }
+
     async fetchProductsFromDb() {
         try {
             const query = `
@@ -693,6 +953,10 @@ class HomeDepotProvider extends BaseProvider {
                         progress.successCount++;
                     } else if (result.status === 'success' || result.status === 'no_changes') {
                         progress.successCount++;
+                    } else if (result.status === 'retry_later') {
+                        // Produtos com 404 marcados para retry - contar como falha temporária na UI
+                        progress.failCount++;
+                        progress.retryLaterCount = (progress.retryLaterCount || 0) + 1;
                     } else if (result.status === 'failed') {
                         progress.failCount++;
                     }
@@ -741,6 +1005,9 @@ class HomeDepotProvider extends BaseProvider {
         logger.store(this.storeName, 'info', `Processed: ${progress.processedProducts}`);
         logger.store(this.storeName, 'info', `Success: ${progress.successCount}`);
         logger.store(this.storeName, 'info', `Failed: ${progress.failCount}`);
+        if (progress.retryLaterCount && progress.retryLaterCount > 0) {
+            logger.store(this.storeName, 'info', `Pending 404 Retries: ${progress.retryLaterCount}`);
+        }
         logger.store(this.storeName, 'info', `Updated: ${progress.updatedProducts}`);
         logger.store(this.storeName, 'info', `Out of Stock: ${this.outOfStockSet.size}`);
         
@@ -749,6 +1016,30 @@ class HomeDepotProvider extends BaseProvider {
         }
 
         if (updateProgress) updateProgress(progress);
+        
+        // Process 404 retries before finalizing
+        if (!isCancelled) {
+            const retryResults = await this.process404Retries();
+            if (retryResults.processed > 0) {
+                // Update progress with retry results
+                // Não somar processedProducts novamente pois já foram contados
+                progress.successCount += retryResults.success;
+                
+                // Ajustar contador de falhas: 
+                // - Remover produtos que foram recuperados com sucesso
+                // - Manter produtos que ainda falharam
+                progress.failCount = progress.failCount - retryResults.success;
+                
+                // Remover produtos processados do contador retryLater
+                if (progress.retryLaterCount) {
+                    progress.retryLaterCount = Math.max(0, progress.retryLaterCount - retryResults.processed);
+                }
+                
+                if (updateProgress) updateProgress(progress);
+                
+                logger.store(this.storeName, 'info', `🔄 404 Retries completed: ${retryResults.success} recovered, ${retryResults.failed} still failed`);
+            }
+        }
         
         // Batch update all problematic products
         if (this.problematicProducts.length > 0) {
